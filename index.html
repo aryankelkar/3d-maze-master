@@ -1,0 +1,2161 @@
+<!DOCTYPE html>
+<html lang="en">
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+        <meta name="description" content="Fully three dimensional mazes, in first person"/>
+
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black">
+        <meta name="apple-mobile-web-app-title" content="3D Maze">
+        <link rel="icon" type="image/x-icon" href="favicon.ico">
+        <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png">
+        <link rel="apple-touch-icon" href="icons/icon-152x152.png">
+
+        <meta name="theme-color" content="#dddddd">
+
+        <meta property="og:title" content="3D Maze" />
+        <meta property="og:description" content="Fully three dimensional mazes, in first person" />
+        <meta property="og:image" content="screenshot.png" />
+        <meta property="og:image:type" content="image/png" />
+        <meta property="og:image:width" content="1057" />
+        <meta property="og:image:height" content="835" />
+
+        <link rel="manifest" href="manifest.json">
+
+        <!-- Google Fonts: Orbitron (Sci-Fi Display) & Outfit (Modern Geometric UI) -->
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+        <title>3D Maze</title>
+
+        <style>
+            html, body {
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                height: 100%;
+                overflow: hidden;
+                position: fixed;
+                touch-action: none;
+                -webkit-overflow-scrolling: none;
+                background-color: #05070B;
+            }
+
+            #mainCanvas {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                display: block;
+                z-index: 0;
+                pointer-events: auto;
+            }
+
+            #overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                pointer-events: none;
+                -webkit-user-select: none;
+                user-select: none;
+                z-index: 10;
+            }
+            #overlay > * {
+                pointer-events: initial;
+            }
+            #overlay > .tutorial-element {
+                pointer-events: none;
+            }
+
+            a {
+                color: #ffffff;
+            }
+
+                        :root {
+                --font-display: 'Orbitron', -apple-system, sans-serif;
+                --font-ui: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+                /* 1. Foundation */
+                --bg-obsidian: #05070B;
+                --bg-graphite: #0B111A;
+                --surface-elevated: #111A25;
+                --surface-secondary: #17212D;
+                --border-subtle: #34404C;
+                --border-titanium: #4B5966;
+                --border-titanium-light: #64748B;
+
+                /* 2. Typography */
+                --text-primary: #F1F0EA;       /* Warm Platinum */
+                --text-secondary: #B0BAC7;     /* Titanium Silver */
+                --text-muted: #7D8999;         /* Muted Slate */
+
+                /* 3. Premium Accents */
+                --gold-champagne: #D6B875;     /* Achievements & Trophy */
+                --gold-highlight: #F0D9A0;     /* Subtle Gold Highlight */
+                --teal-ice: #79C9D4;           /* Restrained Readout/Indicator */
+                --teal-interactive: #54B9C6;   /* Primary Interactive Action */
+                --teal-interactive-hover: #67CCD8;
+
+                /* 4. Status Colors */
+                --color-success: #56C8A0;      /* Refined Emerald (Next Level) */
+                --color-success-hover: #6ADBAC;
+                --color-warning: #DDB36A;
+                --color-error: #D87575;
+
+                /* Backward-compatible token aliases */
+                --cyan-neon: #54B9C6;
+                --azure-neon: #79C9D4;
+                --gold-neon: #D6B875;
+                --emerald-neon: #56C8A0;
+                --card-bg: linear-gradient(165deg, rgba(17, 26, 37, 0.94) 0%, rgba(11, 17, 26, 0.98) 100%);
+            }
+
+            #blocker {
+                position: fixed;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                overflow-x: hidden;
+                overflow-y: auto;
+                box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                z-index: 9999;
+                background: radial-gradient(circle at 50% 45%, rgba(17, 26, 37, 0.88) 0%, rgba(5, 7, 11, 0.97) 100%);
+            }
+
+            #blocker.center-menu {
+                display: flex;
+                justify-content: center;
+                flex-direction: column;
+            }
+
+            /* Void Eclipse Inspired Top Navigation Tabs */
+            .top-nav-bar {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 52px;
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                padding: 0 clamp(24px, 4vw, 48px);
+                z-index: 25;
+                box-sizing: border-box;
+                pointer-events: none;
+            }
+            .top-nav-right {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                pointer-events: auto;
+            }
+            .top-nav-tab {
+                background: rgba(17, 26, 37, 0.75);
+                border: 1px solid var(--border-subtle);
+                color: var(--text-secondary);
+                font-family: var(--font-display);
+                font-size: 11px;
+                letter-spacing: 1.5px;
+                padding: 6px 14px;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            .top-nav-tab:hover {
+                color: var(--text-primary);
+                background: rgba(23, 33, 45, 0.95);
+                border-color: var(--teal-interactive);
+                box-shadow: 0 0 12px rgba(84, 185, 198, 0.15);
+            }
+
+            #menu-body {
+                position: relative;
+                -webkit-text-size-adjust: none;
+                -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+                color: var(--text-primary);
+                text-align: center;
+                font-family: var(--font-ui);
+                max-width: 440px;
+                width: 90%;
+                margin: auto;
+                padding: 36px 32px 28px;
+                box-sizing: border-box;
+                background: linear-gradient(175deg, rgba(17, 26, 37, 0.94) 0%, rgba(11, 17, 26, 0.98) 100%);
+                border: 1px solid var(--border-subtle);
+                border-top: 1px solid var(--border-titanium);
+                backdrop-filter: blur(28px) saturate(180%);
+                -webkit-backdrop-filter: blur(28px) saturate(180%);
+                box-shadow: 0 24px 64px -8px rgba(0, 0, 0, 0.88), 0 0 24px -8px rgba(84, 185, 198, 0.08), inset 0 1px 0 rgba(241, 240, 234, 0.12);
+                border-radius: 20px;
+                cursor: default;
+                animation: victoryPopIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
+
+            #menu-title {
+                margin-bottom: 8px;
+            }
+
+            .menu-logo-crest {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 54px;
+                height: 54px;
+                margin: 0 auto 8px;
+                position: relative;
+                background: radial-gradient(circle, var(--surface-secondary) 0%, var(--bg-graphite) 80%);
+                border-radius: 50%;
+                border: 1px solid var(--border-subtle);
+            }
+            .menu-logo-ring {
+                position: absolute;
+                inset: -2px;
+                border: 1px dashed var(--border-titanium);
+                border-radius: 50%;
+                animation: hudSpin 20s linear infinite;
+            }
+            .menu-logo-glow {
+                position: absolute;
+                inset: 2px;
+                background: radial-gradient(circle, rgba(121, 201, 212, 0.12) 0%, transparent 70%);
+                border-radius: 50%;
+                animation: victoryCrestPulse 3.5s infinite ease-in-out;
+            }
+            .menu-logo-icon {
+                position: relative;
+                width: 26px;
+                height: 26px;
+                color: var(--teal-ice);
+                filter: drop-shadow(0 0 8px rgba(121, 201, 212, 0.5));
+                z-index: 2;
+            }
+
+            #menu-title .menu-title-text {
+                font-family: var(--font-display) !important;
+                font-size: 38px !important;
+                font-weight: 900;
+                letter-spacing: 5px;
+                background: linear-gradient(135deg, #FFFFFF 0%, #F1F0EA 45%, #B0BAC7 100%);
+                background-size: 200% auto;
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6));
+                display: block;
+                margin: 0 0 4px;
+                line-height: 1.1;
+            }
+
+            .menu-tagline {
+                font-family: var(--font-display);
+                font-size: 11px;
+                font-weight: 700;
+                color: var(--text-muted);
+                letter-spacing: 2.5px;
+                margin-bottom: 22px;
+                text-transform: uppercase;
+            }
+
+            .menu-vr-pill {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 7px;
+                padding: 4px 14px;
+                background: rgba(17, 26, 37, 0.85);
+                border: 1px solid var(--border-subtle);
+                border-radius: 9999px;
+                font-family: var(--font-display);
+                font-size: 10.5px !important;
+                font-weight: 700;
+                letter-spacing: 1.5px;
+                color: var(--teal-ice) !important;
+                margin: 0 auto 14px;
+            }
+            .menu-vr-pill span {
+                font-size: 10.5px !important;
+                font-family: var(--font-display) !important;
+                letter-spacing: 1.2px;
+                color: var(--teal-ice) !important;
+                background: none !important;
+                -webkit-text-fill-color: var(--teal-ice) !important;
+            }
+            .menu-vr-pill .pill-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: var(--teal-interactive);
+                box-shadow: 0 0 6px var(--teal-interactive);
+                animation: rankPulse 2s infinite ease-in-out;
+            }
+
+            .button-vr {
+                background: linear-gradient(135deg, #3730A3 0%, #312E81 100%) !important;
+                border: 1px solid #6366F1 !important;
+                box-shadow: 0 4px 16px rgba(49, 46, 129, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+                color: var(--text-primary) !important;
+                font-family: var(--font-display) !important;
+                font-size: 14.5px !important;
+                font-weight: 800 !important;
+                letter-spacing: 1.5px !important;
+            }
+            .button-vr:hover {
+                background: linear-gradient(135deg, #4338CA 0%, #3730A3 100%) !important;
+                border-color: #818CF8 !important;
+                box-shadow: 0 6px 22px rgba(67, 56, 202, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+                transform: translateY(-1.5px);
+            }
+
+            .focusable-menu {
+                width: 100%;
+                margin: 0 auto;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }
+
+            .focusable-menu > * {
+                margin: 6px 0;
+            }
+
+            button {
+                color: var(--text-primary);
+                font-family: var(--font-ui);
+                font-weight: 600;
+                background: linear-gradient(180deg, var(--surface-secondary) 0%, var(--surface-elevated) 100%);
+                border: 1px solid var(--border-subtle);
+                border-radius: 12px;
+                box-sizing: border-box;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+                transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                cursor: pointer;
+            }
+            button:hover {
+                background: linear-gradient(180deg, #1E2B3A 0%, var(--surface-secondary) 100%);
+                border-color: var(--border-titanium);
+                box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+                transform: translateY(-1.5px);
+                color: #FFFFFF;
+            }
+            button:active {
+                transform: translateY(0) scale(0.985);
+            }
+
+            .button-zone {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                margin: 0 auto;
+                width: 100%;
+            }
+
+            .button-zone button {
+                width: 100%;
+                margin: 0;
+                font-size: 14.5px;
+                padding: 13px 20px;
+                letter-spacing: 0.6px;
+            }
+
+            .menu-hero-btn {
+                background: linear-gradient(135deg, #1C5A64 0%, #13454D 100%) !important;
+                border: 1px solid var(--teal-interactive) !important;
+                box-shadow: 0 6px 20px rgba(84, 185, 198, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+                font-family: var(--font-display) !important;
+                font-size: 14.5px !important;
+                font-weight: 800 !important;
+                letter-spacing: 2.2px !important;
+                padding: 14px 24px !important;
+                border-radius: 12px !important;
+                color: #FFFFFF !important;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                position: relative;
+                overflow: hidden;
+                transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+            }
+            .menu-hero-btn::after {
+                content: '';
+                position: absolute;
+                top: -50%;
+                left: -50%;
+                width: 200%;
+                height: 200%;
+                background: linear-gradient(60deg, transparent 40%, rgba(255, 255, 255, 0.15) 50%, transparent 60%);
+                transform: translateX(-100%);
+                transition: transform 0.65s ease;
+                pointer-events: none;
+            }
+            .menu-hero-btn:hover::after {
+                transform: translateX(100%);
+            }
+            .menu-hero-btn:hover {
+                background: linear-gradient(135deg, #246F7B 0%, #18555F 100%) !important;
+                border-color: var(--teal-ice) !important;
+                box-shadow: 0 8px 24px rgba(84, 185, 198, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+                transform: translateY(-1.5px);
+                color: #FFFFFF !important;
+            }
+            .menu-hero-btn:active {
+                transform: translateY(0) scale(0.985) !important;
+            }
+
+            .menu-sub-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 9px;
+                background: var(--surface-elevated) !important;
+                border: 1px solid var(--border-subtle) !important;
+                border-radius: 12px !important;
+                padding: 13px 20px !important;
+                font-family: var(--font-display) !important;
+                font-size: 12.5px !important;
+                font-weight: 700 !important;
+                letter-spacing: 1.5px !important;
+                color: var(--text-secondary) !important;
+                transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+            }
+            .menu-sub-btn:hover {
+                background: var(--surface-secondary) !important;
+                border-color: var(--border-titanium) !important;
+                color: var(--text-primary) !important;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+                transform: translateY(-1.5px);
+            }
+            .menu-sub-btn:active {
+                transform: translateY(0) scale(0.985) !important;
+            }
+
+            .start-controls-hint {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                margin-top: 20px;
+                padding-top: 15px;
+                border-top: 1px solid var(--border-subtle);
+                font-size: 11px;
+                color: var(--text-muted);
+                font-family: var(--font-ui);
+                letter-spacing: 0.4px;
+            }
+            .start-controls-hint kbd {
+                display: inline-block;
+                padding: 2.5px 7px;
+                font-size: 9.5px;
+                font-family: var(--font-display);
+                font-weight: 700;
+                color: var(--text-primary);
+                background: var(--bg-graphite);
+                border: 1px solid var(--border-subtle);
+                border-bottom: 2px solid var(--border-titanium);
+                border-radius: 4px;
+                margin: 0 1px;
+            }
+            .hint-sep {
+                color: var(--border-subtle);
+            }
+
+            /* Submenu Telemetry & Styling */
+            .menu-header-bar {
+                margin-bottom: 14px;
+            }
+            .menu-section-title {
+                font-family: var(--font-display);
+                font-size: 12px;
+                font-weight: 700;
+                letter-spacing: 2px;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+            }
+            .size-telemetry-box {
+                background: linear-gradient(180deg, var(--surface-elevated) 0%, var(--bg-graphite) 100%);
+                border: 1px solid var(--border-subtle);
+                border-top: 2px solid var(--teal-interactive);
+                border-radius: 14px;
+                padding: 14px 12px;
+                margin-bottom: 16px;
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            }
+            .size-display-val {
+                font-family: var(--font-display);
+                font-size: 32px;
+                font-weight: 900;
+                color: var(--teal-ice);
+                text-shadow: 0 0 14px rgba(121, 201, 212, 0.35);
+                line-height: 1.1;
+                margin-bottom: 4px;
+            }
+            .size-display-desc {
+                font-family: var(--font-display);
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 1.5px;
+                color: var(--text-muted);
+            }
+            .slider-wrapper {
+                width: 100%;
+                margin: 0 0 18px;
+            }
+            .slider-wrapper input[type='range'] {
+                width: 100%;
+                margin: 0 0 6px;
+                accent-color: var(--teal-interactive);
+                cursor: pointer;
+            }
+            .slider-ticks {
+                display: flex;
+                justify-content: space-between;
+                font-family: var(--font-display);
+                font-size: 10px;
+                color: var(--text-muted);
+                padding: 0 4px;
+            }
+            .pause-sector-badge {
+                font-family: var(--font-display);
+                font-size: 13px;
+                letter-spacing: 1.5px;
+                color: var(--text-secondary);
+                padding: 8px 16px;
+                background: var(--surface-elevated);
+                border: 1px solid var(--border-subtle);
+                border-radius: 9999px;
+                margin: 0 auto 16px;
+                display: inline-block;
+            }
+            .pause-sector-badge strong {
+                color: var(--teal-ice);
+            }
+
+            /* Settings Configuration Panel */
+            .settings-group {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                margin-bottom: 18px;
+                text-align: left;
+            }
+            .setting-card {
+                background: linear-gradient(180deg, var(--surface-elevated) 0%, var(--bg-graphite) 100%);
+                border: 1px solid var(--border-subtle);
+                border-radius: 12px;
+                padding: 12px 16px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                box-sizing: border-box;
+                transition: all 0.2s ease;
+            }
+            .setting-card:hover {
+                border-color: var(--border-titanium);
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+            }
+            .setting-info {
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+            }
+            .setting-title {
+                font-family: var(--font-display);
+                font-size: 12.5px;
+                font-weight: 700;
+                letter-spacing: 1px;
+                color: var(--text-primary);
+            }
+            .setting-desc {
+                font-size: 11px;
+                color: var(--text-muted);
+                letter-spacing: 0.3px;
+            }
+
+            /* Toggle Switch */
+            .cyber-switch {
+                position: relative;
+                display: inline-block;
+                width: 44px;
+                height: 24px;
+                flex-shrink: 0;
+                cursor: pointer;
+            }
+            .cyber-switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+                position: absolute;
+            }
+            .cyber-slider {
+                position: absolute;
+                inset: 0;
+                background-color: var(--surface-secondary);
+                border: 1px solid var(--border-subtle);
+                border-radius: 24px;
+                transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            .cyber-slider:before {
+                position: absolute;
+                content: "";
+                height: 16px;
+                width: 16px;
+                left: 3px;
+                bottom: 3px;
+                background-color: var(--text-muted);
+                border-radius: 50%;
+                transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            .cyber-switch input:checked + .cyber-slider {
+                background-color: rgba(31, 107, 118, 0.5);
+                border-color: var(--teal-interactive);
+                box-shadow: 0 0 10px rgba(84, 185, 198, 0.25);
+            }
+            .cyber-switch input:checked + .cyber-slider:before {
+                transform: translateX(20px);
+                background-color: var(--teal-interactive);
+                box-shadow: 0 0 6px var(--teal-interactive);
+            }
+
+            /* Radio Pill Group */
+            .radio-toggle-group {
+                display: inline-flex;
+                gap: 6px;
+            }
+            .radio-pill {
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 11.5px;
+                font-weight: 600;
+                color: var(--text-secondary);
+                padding: 4px 10px;
+                background: var(--surface-elevated);
+                border: 1px solid var(--border-subtle);
+                border-radius: 6px;
+                transition: all 0.2s ease;
+            }
+            .radio-pill:hover {
+                border-color: var(--border-titanium);
+                color: var(--text-primary);
+            }
+            .radio-pill input[type="radio"] {
+                accent-color: var(--teal-interactive);
+                cursor: pointer;
+                margin: 0;
+            }
+
+            /* Version Telemetry Watermark */
+            #version {
+                font-family: var(--font-display);
+                font-size: 10.5px;
+                letter-spacing: 2px;
+                color: var(--text-muted);
+                opacity: 0.6;
+                margin-top: 18px;
+                text-transform: uppercase;
+                transition: color 0.2s ease;
+            }
+
+            /* Desktop Two-Zone Game Composition */
+            @media (min-width: 960px) {
+                #blocker {
+                    background: linear-gradient(90deg, rgba(5, 7, 11, 0.96) 0%, rgba(11, 17, 26, 0.86) 420px, rgba(5, 7, 11, 0.3) 700px, transparent 100%);
+                    justify-content: center;
+                    align-items: flex-start;
+                    padding-left: clamp(48px, 6vw, 100px);
+                }
+                #menu-body {
+                    margin: 0 !important;
+                    text-align: left !important;
+                    max-width: 420px !important;
+                    background: rgba(11, 17, 26, 0.88) !important;
+                    border: 1px solid var(--border-subtle) !important;
+                    border-left: 2px solid var(--teal-interactive) !important;
+                    box-shadow: 0 24px 64px -8px rgba(0, 0, 0, 0.88), 0 0 24px -8px rgba(84, 185, 198, 0.08) !important;
+                    border-radius: 14px !important;
+                    padding: 32px 30px 24px !important;
+                }
+                #menu-title {
+                    text-align: left !important;
+                }
+                .menu-logo-crest {
+                    margin: 0 0 10px 0 !important;
+                }
+                .start-controls-hint {
+                    justify-content: flex-start !important;
+                }
+                .pause-sector-badge {
+                    margin: 0 0 16px 0 !important;
+                }
+                .size-telemetry-box {
+                    text-align: left !important;
+                }
+            }
+
+            /* In-Game Flight Telemetry HUD */
+            .gameplay-hud {
+                position: fixed;
+                top: 18px;
+                right: 22px;
+                z-index: 9998;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                pointer-events: auto;
+                font-family: var(--font-ui);
+                animation: hudFadeIn 0.3s ease;
+            }
+            @keyframes hudFadeIn {
+                from { opacity: 0; transform: translateY(-8px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .hud-chip {
+                display: flex;
+                flex-direction: column;
+                padding: 6px 14px;
+                background: rgba(11, 17, 26, 0.85);
+                border: 1px solid var(--border-subtle);
+                border-radius: 10px;
+                backdrop-filter: blur(14px);
+                -webkit-backdrop-filter: blur(14px);
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+                min-width: 72px;
+            }
+            .hud-label {
+                font-family: var(--font-display);
+                font-size: 8.5px;
+                font-weight: 700;
+                letter-spacing: 1.5px;
+                color: var(--text-muted);
+                text-transform: uppercase;
+            }
+            .hud-value {
+                font-family: var(--font-display);
+                font-size: 14px;
+                font-weight: 800;
+                color: var(--text-primary);
+                letter-spacing: 0.5px;
+                font-variant-numeric: tabular-nums;
+            }
+            .hud-pause-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 8px 14px;
+                background: rgba(17, 26, 37, 0.88);
+                border: 1px solid var(--border-subtle);
+                border-radius: 10px;
+                color: var(--text-secondary);
+                font-family: var(--font-display);
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 1px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+            .hud-pause-btn:hover {
+                background: var(--surface-secondary);
+                border-color: var(--teal-interactive);
+                color: var(--text-primary);
+                box-shadow: 0 0 12px rgba(84, 185, 198, 0.25);
+                transform: translateY(-1px);
+            }
+
+            /* Settings section headers */
+            .settings-section-title {
+                font-family: var(--font-display);
+                font-size: 10.5px;
+                font-weight: 800;
+                letter-spacing: 2px;
+                color: var(--teal-ice);
+                text-transform: uppercase;
+                margin: 14px 0 8px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .settings-section-title::after {
+                content: '';
+                flex: 1;
+                height: 1px;
+                background: var(--border-subtle);
+            }
+            .slider-setting-row {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                width: 100%;
+            }
+            .slider-setting-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                width: 100%;
+            }
+            .slider-val-badge {
+                font-family: var(--font-display);
+                font-size: 12px;
+                font-weight: 700;
+                color: var(--teal-ice);
+            }
+            .key-badges-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin-top: 4px;
+            }
+            .key-badge-pair {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                font-size: 11px;
+                color: var(--text-secondary);
+                background: var(--surface-elevated);
+                padding: 3px 8px;
+                border-radius: 6px;
+                border: 1px solid var(--border-subtle);
+            }
+
+            /* Celebration Confetti Layer */
+            #celebrationConfettiCanvas {
+                position: fixed;
+                inset: 0;
+                width: 100vw;
+                height: 100vh;
+                pointer-events: none;
+                z-index: 10001;
+            }
+
+            /* Floating Reopen Pill Button */
+            .victory-reopen-btn {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 9999;
+                display: flex;
+                align-items: center;
+                gap: 9px;
+                padding: 10px 18px;
+                background: var(--surface-elevated);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(214, 184, 117, 0.4);
+                border-radius: 9999px;
+                color: var(--text-primary);
+                font-family: var(--font-ui);
+                font-size: 13.5px;
+                font-weight: 700;
+                cursor: pointer;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 14px rgba(214, 184, 117, 0.15);
+                transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            .victory-reopen-btn:hover {
+                transform: translateY(-2px);
+                background: var(--surface-secondary);
+                border-color: var(--gold-champagne);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6), 0 0 18px rgba(214, 184, 117, 0.25);
+            }
+            .victory-reopen-btn:focus-visible {
+                outline: 2px solid var(--gold-champagne);
+                outline-offset: 2px;
+            }
+
+            /* Full-screen Celebration Modal Backdrop */
+            #completionMessage {
+                position: fixed;
+                inset: 0;
+                width: 100vw;
+                height: 100vh;
+                z-index: 10000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: radial-gradient(ellipse at 50% 40%, rgba(11, 17, 26, 0.85) 0%, rgba(5, 7, 11, 0.96) 100%);
+                backdrop-filter: blur(14px);
+                -webkit-backdrop-filter: blur(14px);
+                padding: 18px;
+                box-sizing: border-box;
+                overflow-y: auto;
+                pointer-events: auto;
+                text-align: center;
+            }
+
+            /* Victory Card - Deep Graphite with Titanium Border & Champagne Details */
+            .victory-card {
+                position: relative;
+                background: var(--card-bg);
+                border: 1px solid var(--border-titanium);
+                backdrop-filter: blur(28px) saturate(180%);
+                -webkit-backdrop-filter: blur(28px) saturate(180%);
+                box-shadow: 0 24px 68px -12px rgba(0, 0, 0, 0.9), 0 0 30px -8px rgba(214, 184, 117, 0.1), inset 0 1px 0 rgba(241, 240, 234, 0.15);
+                border-radius: 20px;
+                max-width: 450px;
+                width: 92%;
+                margin: auto;
+                padding: 32px 26px 26px;
+                box-sizing: border-box;
+                color: var(--text-primary);
+                font-family: var(--font-ui);
+                animation: victoryPopIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                will-change: transform, opacity;
+                transform: translateZ(0);
+            }
+
+            /* Precision Titanium Corner Accents */
+            .tech-corner {
+                position: absolute;
+                width: 12px;
+                height: 12px;
+                border-color: var(--border-titanium);
+                border-style: solid;
+                pointer-events: none;
+                opacity: 0.65;
+            }
+            .tech-corner.top-left { top: 8px; left: 8px; border-width: 1.5px 0 0 1.5px; }
+            .tech-corner.top-right { top: 8px; right: 8px; border-width: 1.5px 1.5px 0 0; }
+            .tech-corner.bottom-left { bottom: 8px; left: 8px; border-width: 0 0 1.5px 1.5px; }
+            .tech-corner.bottom-right { bottom: 8px; right: 8px; border-width: 0 1.5px 1.5px 0; }
+
+            /* Audio Mute Button */
+            .victory-mute-btn {
+                position: absolute;
+                top: 14px;
+                right: 14px;
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+                background: rgba(17, 26, 37, 0.6);
+                border: 1px solid var(--border-subtle);
+                color: var(--text-secondary);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 15px;
+                transition: all 0.2s ease;
+                user-select: none;
+            }
+            .victory-mute-btn:hover {
+                background: var(--surface-secondary);
+                border-color: var(--border-titanium);
+                color: var(--text-primary);
+            }
+            .victory-mute-btn:focus-visible {
+                outline: 2px solid var(--teal-interactive);
+                outline-offset: 2px;
+            }
+
+            /* Trophy Emblem: Champagne gold within dark circular container and thin muted gold ring */
+            .victory-crest-wrapper {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 76px;
+                height: 76px;
+                margin: 0 auto 10px;
+                background: radial-gradient(circle at 50% 40%, var(--surface-secondary) 0%, var(--bg-graphite) 85%);
+                border: 1.5px solid rgba(214, 184, 117, 0.45);
+                border-radius: 50%;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 16px rgba(214, 184, 117, 0.15), inset 0 1px 0 rgba(240, 217, 160, 0.2);
+            }
+            .victory-crest-glow {
+                position: absolute;
+                inset: -4px;
+                border-radius: 50%;
+                background: radial-gradient(circle, rgba(214, 184, 117, 0.18) 0%, transparent 70%);
+                animation: victoryCrestPulse 4s infinite ease-in-out;
+                pointer-events: none;
+            }
+            .victory-hologram-ring {
+                position: absolute;
+                border-radius: 50%;
+                pointer-events: none;
+            }
+            .victory-hologram-ring.outer {
+                inset: 3px;
+                border: 1px dashed rgba(214, 184, 117, 0.35);
+                animation: hudSpin 24s linear infinite;
+            }
+            .victory-hologram-ring.inner {
+                inset: 8px;
+                border: 1px solid rgba(214, 184, 117, 0.2);
+                border-top-color: transparent;
+                border-bottom-color: transparent;
+                animation: hudSpinReverse 16s linear infinite;
+            }
+            .victory-crest-badge {
+                position: relative;
+                font-size: 38px;
+                line-height: 1;
+                filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 14px rgba(214, 184, 117, 0.6));
+                animation: victoryCrestFloat 4s infinite ease-in-out;
+                z-index: 2;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            /* Victory Title: Platinum white with restrained gold glint */
+            .victory-title {
+                font-family: var(--font-display);
+                font-size: 26px;
+                font-weight: 900;
+                letter-spacing: 3.5px;
+                margin: 6px 0 4px;
+                color: var(--text-primary);
+                background: linear-gradient(90deg, #F1F0EA 0%, #F0D9A0 35%, #F1F0EA 50%, #F0D9A0 65%, #F1F0EA 100%);
+                background-size: 200% auto;
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.8));
+                animation: victoryTitleShimmer 8s linear infinite;
+                line-height: 1.15;
+            }
+            .victory-subtitle {
+                font-family: var(--font-ui);
+                font-size: 13px;
+                color: var(--text-muted);
+                margin: 0 0 16px;
+                font-weight: 500;
+                letter-spacing: 0.6px;
+            }
+
+            /* Achievement Badge: Gold stars, dark graphite bg, subtle gold border, platinum rank */
+            .victory-rating-box {
+                display: inline-flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 3px;
+                padding: 6px 20px 8px;
+                background: var(--surface-elevated);
+                border: 1px solid rgba(214, 184, 117, 0.35);
+                border-radius: 9999px;
+                margin-bottom: 18px;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(240, 217, 160, 0.12);
+            }
+            .victory-stars {
+                font-size: 20px;
+                color: var(--gold-champagne);
+                letter-spacing: 6px;
+                text-shadow: 0 0 10px rgba(214, 184, 117, 0.45);
+            }
+            .victory-rank {
+                font-family: var(--font-display);
+                font-size: 10px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 2px;
+                color: var(--text-primary);
+            }
+            .victory-rank::before {
+                content: '';
+                display: inline-block;
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                background: var(--gold-champagne);
+                box-shadow: 0 0 6px var(--gold-champagne);
+                margin-right: 7px;
+                vertical-align: middle;
+                animation: rankPulse 2.5s infinite ease-in-out;
+            }
+
+            /* Statistics Cards: Consistent dimensions & alignment, dark graphite surface, restrained border */
+            .victory-stats-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+            .victory-stat-card {
+                position: relative;
+                background: var(--surface-elevated);
+                border: 1px solid var(--border-subtle);
+                border-radius: 12px;
+                padding: 12px 6px 10px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+                transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+                animation: statCardFadeIn 0.4s ease-out backwards;
+            }
+            .victory-stat-card:hover {
+                transform: translateY(-2px);
+                border-color: var(--border-titanium);
+            }
+            .stat-svg {
+                width: 17px;
+                height: 17px;
+                color: var(--text-secondary);
+                margin-bottom: 2px;
+                flex-shrink: 0;
+            }
+            .trophy-svg {
+                color: var(--gold-champagne);
+                filter: drop-shadow(0 0 4px rgba(214, 184, 117, 0.4));
+            }
+            .stat-label {
+                font-family: var(--font-ui);
+                font-size: 9.5px;
+                font-weight: 700;
+                letter-spacing: 1.2px;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+            }
+            .stat-value {
+                font-family: var(--font-display);
+                font-size: 16px;
+                font-weight: 700;
+                color: var(--text-primary);
+                font-variant-numeric: tabular-nums;
+                letter-spacing: 0.5px;
+            }
+            #mazeTimeSpan {
+                color: var(--teal-ice);
+                text-shadow: 0 0 10px rgba(121, 201, 212, 0.35);
+            }
+            #mazeBestTimeSpan {
+                color: var(--gold-champagne);
+                text-shadow: 0 0 10px rgba(214, 184, 117, 0.35);
+            }
+
+            /* Action Buttons */
+            .victory-actions {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                margin-bottom: 10px;
+            }
+            .victory-secondary-actions {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+                margin-bottom: 16px;
+            }
+
+            .victory-btn {
+                position: relative;
+                overflow: hidden;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 9px;
+                width: 100%;
+                border-radius: 12px;
+                font-family: var(--font-ui);
+                font-size: 14.5px;
+                font-weight: 700;
+                cursor: pointer;
+                padding: 13px 20px;
+                transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+                box-sizing: border-box;
+                text-decoration: none;
+                user-select: none;
+                outline: none;
+                letter-spacing: 0.4px;
+            }
+            .victory-btn::after {
+                content: '';
+                position: absolute;
+                top: -50%;
+                left: -50%;
+                width: 200%;
+                height: 200%;
+                background: linear-gradient(60deg, transparent 40%, rgba(255, 255, 255, 0.12) 50%, transparent 60%);
+                transform: translateX(-100%);
+                transition: transform 0.65s ease;
+                pointer-events: none;
+            }
+            .victory-btn:hover::after {
+                transform: translateX(100%);
+            }
+            .victory-btn:active {
+                transform: scale(0.985);
+            }
+            .victory-btn:focus-visible {
+                outline: 2px solid var(--teal-interactive);
+                outline-offset: 2px;
+            }
+
+            /* Primary Button: PLAY AGAIN (Refined Teal) */
+            .victory-btn-primary {
+                background: linear-gradient(135deg, #1C5A64 0%, #13454D 100%);
+                border: 1px solid var(--teal-interactive);
+                color: #FFFFFF;
+                box-shadow: 0 4px 16px rgba(84, 185, 198, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            }
+            .victory-btn-primary:hover {
+                background: linear-gradient(135deg, #246F7B 0%, #18555F 100%);
+                border-color: var(--teal-ice);
+                box-shadow: 0 6px 20px rgba(84, 185, 198, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+                transform: translateY(-1.5px);
+                color: #FFFFFF;
+            }
+            .victory-btn-primary:active {
+                transform: translateY(0) scale(0.985);
+            }
+
+            /* Secondary Button: NEXT LEVEL (Sophisticated Emerald) */
+            .victory-btn-accent {
+                background: linear-gradient(135deg, #1A543E 0%, #123E2D 100%);
+                border: 1px solid var(--color-success);
+                color: #FFFFFF;
+                box-shadow: 0 4px 16px rgba(86, 200, 160, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            }
+            .victory-btn-accent:hover {
+                background: linear-gradient(135deg, #22674C 0%, #164D38 100%);
+                border-color: #66DBB2;
+                box-shadow: 0 6px 20px rgba(86, 200, 160, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+                transform: translateY(-1.5px);
+                color: #FFFFFF;
+            }
+            .victory-btn-accent:active {
+                transform: translateY(0) scale(0.985);
+            }
+
+            /* Tertiary Buttons: CHOOSE SIZE and FREE LOOK (Dark graphite, titanium border, platinum text) */
+            .victory-btn-subtle {
+                background: var(--surface-elevated);
+                border: 1px solid var(--border-subtle);
+                color: var(--text-primary);
+                padding: 11px 16px;
+                font-size: 13.5px;
+                font-weight: 600;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            }
+            .victory-btn-subtle:hover {
+                background: var(--surface-secondary);
+                border-color: var(--border-titanium);
+                color: #FFFFFF;
+                transform: translateY(-1px);
+            }
+            .victory-btn-subtle:active, .victory-btn-subtle.active {
+                border-color: var(--teal-ice);
+                color: var(--teal-ice);
+            }
+
+            .btn-svg {
+                width: 17px;
+                height: 17px;
+                flex-shrink: 0;
+            }
+
+            /* Keycap Hints: Muted gray with dark capsules & platinum text */
+            .victory-hint {
+                font-family: var(--font-ui);
+                font-size: 12px;
+                color: var(--text-muted);
+                line-height: 1.6;
+                margin-top: 4px;
+            }
+            .victory-hint kbd {
+                display: inline-block;
+                padding: 2.5px 7px;
+                font-size: 10px;
+                font-family: var(--font-display);
+                font-weight: 700;
+                color: var(--text-primary);
+                background: var(--bg-graphite);
+                border: 1px solid var(--border-subtle);
+                border-bottom: 2px solid var(--teal-interactive);
+                border-radius: 4px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+                margin: 0 2px;
+            }
+
+            /* Refined Keyframes */
+            @keyframes victoryPopIn {
+                0% {
+                    opacity: 0;
+                    transform: scale(0.94) translateY(14px);
+                }
+                100% {
+                    opacity: 1;
+                    transform: scale(1) translateY(0);
+                }
+            }
+            @keyframes victoryCrestFloat {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-3px); }
+            }
+            @keyframes victoryCrestPulse {
+                0%, 100% {
+                    opacity: 0.5;
+                    transform: scale(1);
+                }
+                50% {
+                    opacity: 0.8;
+                    transform: scale(1.06);
+                }
+            }
+            @keyframes victoryTitleShimmer {
+                0% { background-position: 0% 50%; }
+                100% { background-position: 200% 50%; }
+            }
+            @keyframes statCardFadeIn {
+                0% {
+                    opacity: 0;
+                    transform: translateY(6px);
+                }
+                100% {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            @keyframes hudSpin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            @keyframes hudSpinReverse {
+                0% { transform: rotate(360deg); }
+                100% { transform: rotate(0deg); }
+            }
+            @keyframes rankPulse {
+                0%, 100% { opacity: 0.4; transform: scale(0.9); }
+                50% { opacity: 1; transform: scale(1.15); }
+            }
+
+            /* Responsive Adjustments */
+            @media (max-width: 480px) {
+                .victory-card {
+                    padding: 24px 18px 22px;
+                    border-radius: 16px;
+                }
+                .victory-title {
+                    font-size: 22px;
+                }
+                .victory-crest-badge {
+                    font-size: 34px;
+                }
+                .stat-value {
+                    font-size: 14.5px;
+                }
+            }
+
+            /* Prefers-Reduced-Motion Support */
+            @media (prefers-reduced-motion: reduce) {
+                .victory-card,
+                .victory-crest-badge,
+                .victory-crest-glow,
+                .victory-title,
+                .victory-stat-card,
+                .victory-reopen-btn {
+                    animation: none !important;
+                    transition: none !important;
+                }
+                .victory-card {
+                    opacity: 1 !important;
+                    transform: none !important;
+                }
+                .victory-stat-card {
+                    opacity: 1 !important;
+                    transform: none !important;
+                }
+            }
+
+            #compass-container {
+                position: fixed;
+                top: max(16px, env(safe-area-inset-top));
+                left: max(16px, env(safe-area-inset-left));
+                z-index: 9998;
+                pointer-events: auto;
+                cursor: pointer;
+                border-radius: 50%;
+                filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.75));
+                animation-duration: 0.5s;
+                animation-iteration-count: 12;
+                transition: transform 0.2s ease, opacity 0.25s ease;
+            }
+            #compass-container:hover {
+                transform: scale(1.06);
+            }
+            #compass-container canvas {
+                display: block;
+                border-radius: 50%;
+            }
+
+            #rotation-hint-frame {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            #rotation-hint-frame .rotation-hint-phone {
+                margin: 0.5em;
+                border: solid 2px #ffffff;
+                border-radius: 0.3em;
+            }
+
+            @keyframes compass-tutorial-highlight {
+                0% {
+                    background: radial-gradient( rgba(255, 255, 255, 0.0) 10%, rgba(255, 255, 255, 0.0) 60%);
+                }
+
+                50% {
+                    background: radial-gradient( rgba(200, 255, 255, 1.0) 20%, rgba(255, 255, 255, 0.0) 60%);
+                }
+
+                100% {
+                    background: radial-gradient( rgba(255, 255, 255, 0.0) 10%, rgba(255, 255, 255, 0.0) 60%);
+                }
+            }
+
+            #options-corner {
+                position: absolute;
+                top: env(safe-area-inset-top);
+                right: env(safe-area-inset-right);
+                padding: 10px;
+
+                color: #ffffff;
+                font-family: Arial;
+                line-height: 36px;
+            }
+
+            #options-body {
+                border: 1px solid rgba(128, 128, 128, 0.5);
+                background-color: rgba(0,0,0,0.25);
+                padding: 1em;
+            }
+
+            #version {
+                position: absolute;
+                bottom: env(safe-area-inset-bottom);
+                right: env(safe-area-inset-right);
+                padding: 10px;
+
+                color: rgba(255,255,255,0.25);
+                font-family: Arial;
+                font-size: 10px;
+            }
+
+            #copyright {
+                position: absolute;
+                bottom: env(safe-area-inset-bottom);
+                left: env(safe-area-inset-left);
+                margin-left: auto;
+                margin-right: auto;
+
+                color: rgba(255,255,255,0.25);
+                font-family: Arial;
+                font-size: 10px;
+                padding: 10px;
+                text-align: center;
+            }
+
+            .tutorial-text {
+                position: absolute;
+                top: 50%;
+                text-align: center;
+                width: 100%;
+                pointer-events: none;
+                color: white;
+                white-space: nowrap;
+
+                font-family: Arial;
+                font-size: min(25pt, 3.2cqi);
+
+                animation-duration: 0.5s;
+                animation-iteration-count: 1;
+            }
+
+            .touch-tutorial {
+                background-color: rgba(0,0,0,0.5);
+                border: 1px solid rgba(230, 230, 230, 0.5);
+
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                position: absolute;
+
+                pointer-events: none;
+            }
+            #touch-tutorial-move {
+                animation-duration: 2.5s;
+                animation-iteration-count: infinite;
+            }
+            @keyframes touch-tutorial-animation-move
+            {
+                0% {
+                    background-color: rgba(0,0,0,0.0);
+                    border-color: rgba(230, 230, 230, 0.0);
+                    left: 20%;
+                    top: 70%;
+                }
+                5% {
+                    background-color: rgba(0,0,0,0.5);
+                    border-color: rgba(230, 230, 230, 0.5);
+                }
+                40% {
+                    left: 21%;
+                    top: 30%;
+                }
+                45% {
+                    background-color: rgba(0,0,0,0.5);
+                    border-color: rgba(230, 230, 230, 0.5);
+                }
+                50% {
+                    left: 21%;
+                    top: 30%;
+                    background-color: rgba(0,0,0,0.0);
+                    border-color: rgba(230, 230, 230, 0.0);
+                }
+                51% {
+                    background-color: rgba(0,0,0,0.0);
+                    border-color: rgba(230, 230, 230, 0.0);
+                    left: 20%;
+                    top: 70%;
+                }
+                55% {
+                    background-color: rgba(0,0,0,0.5);
+                    border-color: rgba(230, 230, 230, 0.5);
+                }
+                95% {
+                    background-color: rgba(0,0,0,0.5);
+                    border-color: rgba(230, 230, 230, 0.5);
+                }
+                100% {
+                    background-color: rgba(0,0,0,0.0);
+                    border-color: rgba(230, 230, 230, 0.0);
+                    left: 35%;
+                    top: 65%;
+                }
+            }
+            #touch-tutorial-look {
+                animation-duration: 2s;
+                animation-iteration-count: infinite;
+            }
+            @keyframes touch-tutorial-animation-look
+            {
+                0% {
+                    background-color: rgba(0,0,0,0.0);
+                    border-color: rgba(230, 230, 230, 0.0);
+                    right: 15%;
+                    top: 65%;
+                }
+                10% {
+                    background-color: rgba(0,0,0,0.5);
+                    border-color: rgba(230, 230, 230, 0.5);
+                }
+                60% {
+                    right: 35%;
+                    top: 22%;
+                }
+                90% {
+                    background-color: rgba(0,0,0,0.5);
+                    border-color: rgba(230, 230, 230, 0.5);
+                }
+                100% {
+                    right: 38%;
+                    top: 38%;
+                    background-color: rgba(0,0,0,0.0);
+                    border-color: rgba(230, 230, 230, 0.0);
+                }
+            }
+
+            @keyframes tutorial-text-fade-in {
+                0% {
+                    color: rgba(255,255,255,0.0);
+                }
+                100% {
+                    color: rgba(255,255,255,1.0);
+                }
+            }
+            @keyframes tutorial-text-fade-out {
+                0% {
+                    color: rgba(255,255,255,1.0);
+                }
+                100% {
+                    color: rgba(255,255,255,0.0);
+                }
+            }
+
+            .hide {
+                display: none !important;
+            }
+
+            .frosted {
+                backdrop-filter: blur(0.3em);
+            }
+
+            .transparent-text-50 {
+                color:rgba(255,255,255,0.5);
+            }
+        </style>
+
+        <!-- Global site tag (gtag.js) - Google Analytics -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=UA-120805992-1"></script>
+        <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+
+        gtag('config', 'UA-120805992-1');
+        </script>
+        <script>
+        window.addEventListener('error', function(e) {
+            console.error('[CRITICAL RUNTIME ERROR]', e.message, e.filename, e.lineno, e.error);
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('[UNHANDLED PROMISE REJECTION]', e.reason);
+        });
+        </script>
+
+    </head>
+    <body>
+        <script type="text/javascript" src="js/detectmobilebrowser.js"></script>
+        <script type="text/javascript">
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./service-worker.js')
+                        .then((reg) => {
+                            console.log('service worker registered', reg);
+                            reg.update();
+                        });
+                });
+            }
+        </script>
+
+        <!-- Import maps polyfill -->
+        <!-- Remove this when import maps will be widely supported -->
+        <script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
+
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "https://unpkg.com/three@0.181.0/build/three.module.js",
+                    "three/examples/": "https://unpkg.com/three@0.181.0/examples/"
+                }
+            }
+        </script>
+
+        <div id="compass-container" class="xr-non-vr"></div>
+
+        <div id="touch-tutorial-move" style="display: none;" class="touch-tutorial tutorial-element formfactor-non-desktop">
+        </div>
+        <div id="touch-tutorial-look" style="display: none;" class="touch-tutorial tutorial-element formfactor-non-desktop">
+        </div>
+
+        <div id="computer-tutorial-look" tutorial-step="0" tutorial-type="intro" style="display: none;" class="tutorial-text tutorial-element">
+            <span class='formfactor-desktop'>Move the mouse to look</span>
+            <span style="display: none;" class='formfactor-non-desktop'>Look</span>
+            <br style="display: none;" class='formfactor-non-desktop' />
+            <span style="font-size: 50%; display: none;" class='formfactor-non-desktop'>Drag on the right side of the screen</span>
+        </div>
+        <div id="computer-tutorial-move" tutorial-step="1" tutorial-type="intro" style="display: none;" class="tutorial-text tutorial-element">
+            <span class='formfactor-desktop'>Use the WASD keys to move</span>
+            <span style="display: none;" class='formfactor-non-desktop'>Move</span>
+            <br style="display: none;" class='formfactor-non-desktop' />
+            <span style="font-size: 50%; display: none;" class='formfactor-non-desktop'>Drag on the left side of the screen</span>
+        </div>
+        <div id="computer-tutorial-compass" tutorial-step="2" tutorial-type="intro" style="display: none;" class="tutorial-text tutorial-element">
+            <span>The compass points towards the exit</span>
+            <br style="display: none;" class='formfactor-non-desktop' />
+            <span style="font-size: 50%; display: none;" class='formfactor-non-desktop'>Tap the compass to pause</span>
+        </div>
+
+        <div id="overlay">
+
+            <div tutorial-type="vr" tutorial-step="0" style="display: none;" class="tutorial-text tutorial-element">
+                <span class="vr-controls-controllers">Use the left thumbstick to move</span>
+                <span class="vr-controls-gaze">Tap to move</span>
+
+                <br/>
+                <span style="font-size: 75%;" class="formfactor-desktop">Keyboard + Mouse controls are also available</span>
+            </div>
+            <div tutorial-type="vr" tutorial-step="1" style="display: none;" class="tutorial-text tutorial-element">
+                <span class="vr-controls-controllers">Use the right thumbstick to turn</span>
+                <span class="vr-controls-gaze">Point your head where you want to go</span>
+                <br/>
+                <span style="font-size: 75%">You can also move up and down</span>
+            </div>
+            <div tutorial-type="vr" tutorial-step="2" style="display: none;" class="tutorial-text tutorial-element">
+                <span class="vr-controls-controllers">Adjust movement settings in the "Options" menu</span>
+                <span class="vr-controls-gaze">Press and hold to pause</span>
+            </div>
+            <div tutorial-type="vr" tutorial-step="3" style="display: none;" class="tutorial-text tutorial-element">
+                <span class="vr-controls-controllers">Press either thumbstick to pause</span>
+            </div>
+            <!-- In-Game Flight Telemetry HUD -->
+            <div id="gameplay-hud" class="gameplay-hud xr-non-vr" style="display: none;">
+                <div class="hud-chip">
+                    <span class="hud-label">SECTOR</span>
+                    <span class="hud-value" id="hudSectorSpan">3³</span>
+                </div>
+                <div class="hud-chip">
+                    <span class="hud-label">MISSION TIME</span>
+                    <span class="hud-value" id="hudTimerSpan">00:00</span>
+                </div>
+                <div class="hud-chip">
+                    <span class="hud-label">GATEWAY DIST</span>
+                    <span class="hud-value" id="hudDistSpan">--m</span>
+                </div>
+                <button class="hud-pause-btn" id="hudPauseBtn" title="Pause Flight [Esc / P]" aria-label="Pause Flight">
+                    <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                    <span>PAUSE</span>
+                </button>
+            </div>
+
+            <!-- Confetti Canvas -->
+            <canvas id="celebrationConfettiCanvas"></canvas>
+
+            <!-- Floating Pill for Free Look Reopen -->
+            <button id="victoryReopenBtn" style="display: none;" class="victory-reopen-btn" aria-label="Reopen Victory Stats">
+                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="#D6B875" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+                    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+                    <path d="M4 22h16"></path>
+                    <path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1h10v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34"></path>
+                    <path d="M18 4H6v7a6 6 0 0 0 12 0V4z"></path>
+                </svg>
+                <span>Victory Stats</span>
+            </button>
+
+            <!-- Victory Celebration Popup Modal -->
+            <div id="completionMessage" style="display: none;">
+                <div class="victory-card">
+                    <!-- Precision Tech Corner Accents -->
+                    <div class="tech-corner top-left"></div>
+                    <div class="tech-corner top-right"></div>
+                    <div class="tech-corner bottom-left"></div>
+                    <div class="tech-corner bottom-right"></div>
+
+                    <!-- Mute Toggle Button -->
+                    <button id="btnVictoryMute" class="victory-mute-btn" title="Toggle Audio (M)" aria-label="Toggle Audio" tabindex="0">
+                        <span id="victoryMuteIcon">🔊</span>
+                    </button>
+
+                    <!-- Hologram HUD Trophy Crest -->
+                    <div class="victory-crest-wrapper">
+                        <div class="victory-crest-glow"></div>
+                        <div class="victory-hologram-ring outer"></div>
+                        <div class="victory-hologram-ring inner"></div>
+                        <div class="victory-crest-badge" id="victoryTrophyBadge">🏆</div>
+                    </div>
+
+                    <!-- Header -->
+                    <h2 class="victory-title">MAZE CONQUERED!</h2>
+                    <p class="victory-subtitle">Spatial sector navigation complete</p>
+
+                    <!-- Star Rating & Rank Capsule -->
+                    <div class="victory-rating-box">
+                        <div class="victory-stars" id="victoryStarsSpan">★★★</div>
+                        <div class="victory-rank" id="victoryRankSpan">MASTER NAVIGATOR</div>
+                    </div>
+
+                    <!-- Aerospace Telemetry Statistics Cards -->
+                    <div class="victory-stats-grid">
+                        <div class="victory-stat-card" style="animation-delay: 0.08s;">
+                            <svg class="stat-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="9"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            <span class="stat-label">TIME</span>
+                            <span class="stat-value" id="mazeTimeSpan">0:00</span>
+                        </div>
+                        <div class="victory-stat-card" style="animation-delay: 0.14s;">
+                            <svg class="stat-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                            </svg>
+                            <span class="stat-label">SECTOR SIZE</span>
+                            <span class="stat-value"><span id="mazeCompSizeSpan">3</span>³</span>
+                        </div>
+                        <div class="victory-stat-card" style="animation-delay: 0.20s;">
+                            <svg class="stat-svg trophy-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+                                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+                                <path d="M4 22h16"></path>
+                                <path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1h10v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34"></path>
+                                <path d="M18 4H6v7a6 6 0 0 0 12 0V4z"></path>
+                            </svg>
+                            <span class="stat-label">PERSONAL BEST</span>
+                            <span class="stat-value" id="mazeBestTimeSpan">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Primary Actions -->
+                    <div class="victory-actions">
+                        <button id="btnVictoryPlayAgain" class="victory-btn victory-btn-primary" tabindex="0">
+                            <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path>
+                                <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"></path>
+                                <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"></path>
+                                <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"></path>
+                            </svg>
+                            <span>Play Again</span>
+                        </button>
+                        <button id="btnVictoryNextLevel" class="victory-btn victory-btn-accent" tabindex="0">
+                            <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                            <span>Next Level (<span id="nextLevelSizeSpan">4</span>)</span>
+                        </button>
+                    </div>
+
+                    <!-- Secondary Actions -->
+                    <div class="victory-secondary-actions">
+                        <button id="btnVictoryChangeSize" class="victory-btn victory-btn-subtle" tabindex="0">
+                            <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="4" y1="21" x2="4" y2="14"></line>
+                                <line x1="4" y1="10" x2="4" y2="3"></line>
+                                <line x1="12" y1="21" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12" y2="3"></line>
+                                <line x1="20" y1="21" x2="20" y2="16"></line>
+                                <line x1="20" y1="12" x2="20" y2="3"></line>
+                                <line x1="1" y1="14" x2="7" y2="14"></line>
+                                <line x1="9" y1="8" x2="15" y2="8"></line>
+                                <line x1="17" y1="16" x2="23" y2="16"></line>
+                            </svg>
+                            <span>Choose Size</span>
+                        </button>
+                        <button id="btnVictoryFreeLook" class="victory-btn victory-btn-subtle" tabindex="0">
+                            <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                            </svg>
+                            <span>Free Look</span>
+                        </button>
+                    </div>
+
+                    <!-- Tactical Keycaps Hint -->
+                    <div class="victory-hint formfactor-desktop xr-non-vr">
+                        Press <kbd>Space</kbd> or <kbd>Enter</kbd> to restart · <kbd>Esc</kbd> for free look
+                    </div>
+                    <div class="xr-vr" style="display: none; font-size: 15px; margin-top: 8px; color: var(--teal-ice);">
+                        <span class="vr-controls-controllers">Press either thumbstick to start a new maze</span>
+                        <span class="vr-controls-gaze">Press and hold to start a new maze</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="blocker" class="center-menu">
+                <!-- Void Eclipse Inspired Top Navigation Tabs -->
+                <div class="top-nav-bar formfactor-desktop">
+                    <nav class="top-nav-right">
+                        <button class="top-nav-tab" target-menu="menu-new-maze" title="Configure matrix size">SECTOR SELECT</button>
+                        <button class="top-nav-tab" target-menu="menu-options" title="System settings and controls">OPTIONS</button>
+                    </nav>
+                </div>
+
+                <div id="menu-body" class="blocker-tab">
+                    <!-- Holographic Brand Lockup -->
+                    <div id="menu-title">
+                        <div class="menu-logo-crest">
+                            <div class="menu-logo-glow"></div>
+                            <div class="menu-logo-ring"></div>
+                            <svg class="menu-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                            </svg>
+                        </div>
+                        <span class="menu-title-text">3D MAZE</span>
+                        <div class="menu-tagline">QUANTUM SECTOR LABYRINTH</div>
+                    </div>
+
+                    <!-- Main Hub Menu -->
+                    <div id="menu-intro" class="focusable-menu menu-active">
+                        <!-- VR Headset Status (dynamically activated when WebXR headset is detected) -->
+                        <div class="menu-vr-pill" id="menu-vr-pill" style="display: none;">
+                            <span class="pill-dot">●</span>
+                            <span id="vrStatusText">VR HEADSET DETECTED</span>
+                        </div>
+
+                        <div class="button-zone">
+                            <button class="button-main button-play menu-hero-btn" id="btnLaunchMission">
+                                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                                <span>LAUNCH MISSION</span>
+                            </button>
+                            <button target-menu="menu-new-maze" class="menu-sub-btn">
+                                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="3" width="7" height="7"></rect>
+                                    <rect x="14" y="3" width="7" height="7"></rect>
+                                    <rect x="14" y="14" width="7" height="7"></rect>
+                                    <rect x="3" y="14" width="7" height="7"></rect>
+                                </svg>
+                                <span>SELECT SECTOR SIZE</span>
+                            </button>
+                            <button target-menu="menu-options" class="menu-sub-btn">
+                                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                </svg>
+                                <span>SETTINGS & CONTROLS</span>
+                            </button>
+                            <div class="vr-device-enabled vr-device-first">
+                                <button class="button-vr menu-hero-btn" style="display: none; background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%) !important; border-color: #a855f7 !important;">
+                                    <span>ENTER VR</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Tactical Controls Telemetry Bar -->
+                        <div class="start-controls-hint formfactor-desktop">
+                            <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Thrust</span>
+                            <span class="hint-sep">·</span>
+                            <span><kbd>Mouse</kbd> Steer</span>
+                            <span class="hint-sep">·</span>
+                            <span><kbd>Space</kbd> Boost</span>
+                        </div>
+                    </div>
+
+                    <!-- Sector Size Configuration Menu -->
+                    <div id="menu-new-maze" style="display: none;" class="focusable-menu">
+                        <div class="menu-header-bar">
+                            <span class="menu-section-title">SECTOR MATRIX CONFIGURATION</span>
+                        </div>
+
+                        <div class="size-telemetry-box">
+                            <div class="size-display-val"><span id="menu-new-maze-size-span">3</span>³</div>
+                            <div class="size-display-desc" id="sizeDescriptorSpan">27 CUBIC SECTORS · CADET</div>
+                        </div>
+
+                        <div class="slider-wrapper">
+                            <input type="range" min="2" max="12" value="3" class="slider" id="menu-new-maze-size-slider" oninput="document.querySelector('#menu-new-maze-size-span').innerHTML = this.value; const s = parseInt(this.value); const rank = s >= 8 ? 'MASTER EXPLORER' : (s >= 5 ? 'VETERAN' : 'CADET'); document.querySelector('#sizeDescriptorSpan').innerHTML = (s*s*s) + ' CUBIC SECTORS · ' + rank;">
+                            <div class="slider-ticks">
+                                <span>2</span><span>4</span><span>6</span><span>8</span><span>10</span><span>12</span>
+                            </div>
+                        </div>
+
+                        <div class="button-zone">
+                            <button id="menu-new-maze-button" class="button-main menu-hero-btn">
+                                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                                <span>GENERATE & ENTER</span>
+                            </button>
+                            <button target-menu="menu-options" class="menu-button-root-only menu-sub-btn">
+                                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                                <span>OPTIONS</span>
+                            </button>
+                            <button class="menu-back-button menu-sub-btn">
+                                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg>
+                                <span>BACK TO HUB</span>
+                            </button>
+                            <button class="menu-button-root-only button-play menu-sub-btn" style="display: none;">
+                                <span>BACK</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Pause Menu -->
+                    <div id="menu-pause" style="display: none;" class="focusable-menu">
+                        <div class="menu-header-bar">
+                            <span class="menu-section-title">MISSION PAUSED</span>
+                        </div>
+                        <div class="pause-sector-badge">
+                            <span>CURRENT SECTOR: <strong id="mazeSizeSpan">3</strong>³</span>
+                        </div>
+                        <div class="button-zone">
+                            <button class="button-play button-main menu-hero-btn">
+                                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                <span>RESUME FLIGHT</span>
+                            </button>
+                            <button target-menu="menu-new-maze" class="menu-sub-btn">
+                                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                                <span>CHANGE SECTOR SIZE</span>
+                            </button>
+                            <button target-menu="menu-options" class="menu-sub-btn">
+                                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                                <span>SETTINGS & CONTROLS</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="menu-rotate-phone" style="font-size: 30px; line-height: 34px; display: none;" class="focusable-menu">
+                        <br/>
+                        Rotate your device to play
+                        <br/>
+                        <div id="rotation-hint-frame">
+                            <div class="rotation-hint-phone" style="width: 1.5em; height: 3em"></div>
+                            <div>&#x27A1;</div>
+                            <div class="rotation-hint-phone" style="width: 3em; height: 1.5em"></div>
+                        </div>
+                    </div>
+
+                    <div id="menu-options" style="display: none;" class="focusable-menu">
+                        <div class="menu-header-bar">
+                            <span class="menu-section-title">SYSTEM CONFIGURATION</span>
+                        </div>
+
+                        <div class="settings-group">
+                            <div class="settings-section-title xr-non-vr">FLIGHT & CAMERA</div>
+
+                            <div class="xr-non-vr setting-card">
+                                <div class="setting-info">
+                                    <span class="setting-title">Gimbal Stabilization</span>
+                                    <span class="setting-desc">Lock camera roll to upright horizon</span>
+                                </div>
+                                <label class="cyber-switch" for="setting-fixed-camera">
+                                    <input type="checkbox" id="setting-fixed-camera" name="setting-fixed-camera" checked />
+                                    <span class="cyber-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="xr-non-vr setting-card slider-setting-row">
+                                <div class="slider-setting-header">
+                                    <div class="setting-info">
+                                        <span class="setting-title">Mouse Sensitivity</span>
+                                        <span class="setting-desc">Flight look and pitch response rate</span>
+                                    </div>
+                                    <span class="slider-val-badge" id="valSensitivityBadge">1.0×</span>
+                                </div>
+                                <input type="range" id="setting-mouse-sensitivity" min="0.4" max="2.0" step="0.1" value="1.0" class="menu-slider" style="width: 100%; accent-color: var(--teal-interactive);">
+                            </div>
+
+                            <div class="settings-section-title">AUDIO SYSTEM</div>
+
+                            <div class="setting-card slider-setting-row">
+                                <div class="slider-setting-header">
+                                    <div class="setting-info">
+                                        <span class="setting-title">Master Volume</span>
+                                        <span class="setting-desc">Audio synthesizer & tactile feedback</span>
+                                    </div>
+                                    <span class="slider-val-badge" id="valVolumeBadge">80%</span>
+                                </div>
+                                <input type="range" id="setting-master-volume" min="0" max="100" step="5" value="80" class="menu-slider" style="width: 100%; accent-color: var(--teal-interactive);">
+                            </div>
+
+                            <div class="settings-section-title xr-non-vr">GRAPHICS & PARTICLES</div>
+
+                            <div class="xr-non-vr setting-card">
+                                <div class="setting-info">
+                                    <span class="setting-title">Space Dust Matrix</span>
+                                    <span class="setting-desc">Cosmic dust particle field</span>
+                                </div>
+                                <label class="cyber-switch" for="setting-dust-particles">
+                                    <input type="checkbox" id="setting-dust-particles" name="setting-dust-particles" checked />
+                                    <span class="cyber-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="xr-non-vr setting-card">
+                                <div class="setting-info">
+                                    <span class="setting-title">Thruster Ion Trail</span>
+                                    <span class="setting-desc">Orbital wake particle beam</span>
+                                </div>
+                                <label class="cyber-switch" for="setting-trail-effect">
+                                    <input type="checkbox" id="setting-trail-effect" name="setting-trail-effect" checked />
+                                    <span class="cyber-slider"></span>
+                                </label>
+                            </div>
+
+                            <div class="settings-section-title formfactor-desktop">FLIGHT KEYBINDINGS</div>
+
+                            <div class="setting-card formfactor-desktop" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                                <div class="key-badges-row">
+                                    <span class="key-badge-pair"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Thrust / Strafe</span>
+                                    <span class="key-badge-pair"><kbd>Space</kbd> Ascend</span>
+                                    <span class="key-badge-pair"><kbd>Shift</kbd> Descend</span>
+                                    <span class="key-badge-pair"><kbd>Mouse</kbd> Steer</span>
+                                    <span class="key-badge-pair"><kbd>P</kbd> / <kbd>Esc</kbd> Pause</span>
+                                    <span class="key-badge-pair"><kbd>M</kbd> Audio Mute</span>
+                                </div>
+                            </div>
+
+                            <div class="vr-controls-controllers">
+                                <div class="settings-section-title xr-vr" style="display: none;">VR SYSTEM SETTINGS</div>
+                                <div class="xr-vr xr-force-redraw menu-radio-button setting-card" style="text-align: left; display: none;" name="vr-setting-movement">
+                                    <div class="setting-info">
+                                        <span class="setting-title">VR Locomotion</span>
+                                        <span class="setting-desc">Movement mode through sectors</span>
+                                    </div>
+                                    <div class="radio-toggle-group">
+                                        <label class="radio-pill">
+                                            <input type="radio" id="vr-setting-movement-teleport" name="vr-setting-movement" value="teleport" checked>
+                                            <span>Teleport</span>
+                                        </label>
+                                        <label class="radio-pill">
+                                            <input type="radio" id="vr-setting-movement-smooth" name="vr-setting-movement" value="smooth">
+                                            <span>Smooth</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="xr-vr xr-force-redraw menu-radio-button setting-card" style="text-align: left; display: none;" name="vr-setting-rotation">
+                                    <div class="setting-info">
+                                        <span class="setting-title">VR Rotation</span>
+                                        <span class="setting-desc">Yaw snap angle vs continuous turn</span>
+                                    </div>
+                                    <div class="radio-toggle-group">
+                                        <label class="radio-pill">
+                                            <input type="radio" id="vr-setting-rotation-instant" name="vr-setting-rotation" value="instant" checked>
+                                            <span>Instant</span>
+                                        </label>
+                                        <label class="radio-pill">
+                                            <input type="radio" id="vr-setting-rotation-smooth" name="vr-setting-rotation" value="smooth">
+                                            <span>Smooth</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div id="vr-rotation-speed" class="xr-vr setting-card" style="display: none; flex-direction: column; align-items: stretch;">
+                                    <div class="setting-title" style="margin-bottom: 6px;">VR Turn Rate</div>
+                                    <input type="range" id="vr-setting-rotation-speed" class="menu-slider xr-force-redraw" min="-1" max="1" step="0.1" value="0">
+                                </div>
+                            </div>
+
+                            <div class="vr-controls-gaze xr-vr" style="display: none; font-size: 12px; color: #94a3b8; padding: 12px; background: rgba(15, 23, 42, 0.6); border-radius: 10px;">
+                                Gaze tracking mode has no configurable parameters.
+                            </div>
+
+                            <div class="xr-vr setting-card" style="display: none;">
+                                <div class="setting-info">
+                                    <span class="setting-title">Mirror to Screen</span>
+                                    <span class="setting-desc">Project headset view to external display</span>
+                                </div>
+                                <label class="cyber-switch" for="vr-setting-mirror">
+                                    <input type="checkbox" id="vr-setting-mirror" name="vr-setting-mirror" class="xr-force-redraw">
+                                    <span class="cyber-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="button-zone">
+                            <div class="vr-device-last">
+                                <button class="button-vr menu-sub-btn" style="display: none;">
+                                    <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v7a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V7z"></path><circle cx="8" cy="11" r="2"></circle><circle cx="16" cy="11" r="2"></circle></svg>
+                                    <span>ENTER VR</span>
+                                </button>
+                            </div>
+                            <button class="menu-back-button menu-sub-btn">
+                                <svg class="btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg>
+                                <span>BACK TO HUB</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <br style="display: none;" class="formfactor-non-desktop"/>
+                </div>
+
+                <div id="version">
+                    Version 0.1.0a
+                </div>
+            </div>
+
+        </div>
+
+        <script type="module" src="js/maze.js"></script>
+        <script type="module" src="js/game.js"></script>
+    </body>
+</html>
