@@ -192,7 +192,8 @@ assert(playerFly.z > 0, 'Player smoothly traversed from starting chamber into ce
 // Gateway completion check
 const atGateway = { ...engine3.endPos };
 const distAtGateway = Math.hypot(atGateway.x - engine3.endPos.x, atGateway.y - engine3.endPos.y, atGateway.z - engine3.endPos.z);
-assert(distAtGateway <= 2.2, 'Gateway trigger region activates when player reaches endPos');
+const distMeters = distAtGateway / 2; // maze.majorWidth is 2
+assert(distMeters < 0.4, 'Gateway trigger region activates when distance to endPos is less than 0.4m');
 
 // -------------------------------------------------------------
 // TEST SUITE 6: DYNAMIC SECTOR SIZE SCALING (3^3 to 12^3)

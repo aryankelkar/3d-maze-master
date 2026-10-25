@@ -1308,13 +1308,16 @@ function resolvePlayerMovement(deltaVec, radius) {
 
 /**
  * Validates player entry into the quantum gateway trigger volume.
+ * Triggers victory completion when the distance between the player and the portal
+ * of the end completion goal becomes less than 0.4 m (or player passes the portal plane).
  */
 function checkGatewayCompletion() {
     if (finishedMaze || currentGameState !== GAME_STATE.PLAYING) return;
     if (!endPos) return;
 
     const distToEnd = cameraNode.position.distanceTo(endPos);
-    if (distToEnd <= 2.2 || cameraNode.position.z >= endPos.z - 0.5) {
+    const distInMeters = distToEnd / maze.majorWidth;
+    if (distInMeters < 0.4 || cameraNode.position.z >= endPos.z) {
         onMazeCompletion();
     }
 }
