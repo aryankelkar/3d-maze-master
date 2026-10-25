@@ -111,6 +111,9 @@ const _camAimTarget = new THREE.Vector3();
 function aimCameraNode(node, target) {
     _cameraAimMatrix.lookAt(node.position, target, node.up);
     node.quaternion.setFromRotationMatrix(_cameraAimMatrix);
+    if (controls && controls.object === node && typeof controls.syncOrientation === 'function') {
+        controls.syncOrientation();
+    }
 }
 
 const PI_2 = Math.PI / 2;
@@ -310,7 +313,10 @@ function loadSavedVariables()
 
     const savedSens = storageGetItem('setting-mouse-sensitivity', '1.0');
     const sensVal = parseFloat(savedSens) || 1.0;
-    if (controls) controls.rollSpeed = sensVal;
+    if (controls) {
+        controls.sensitivityMultiplier = sensVal;
+        controls.rollSpeed = sensVal;
+    }
     const sensInput = document.querySelector('#setting-mouse-sensitivity');
     if (sensInput) sensInput.value = sensVal;
     const sensBadge = document.querySelector('#valSensitivityBadge');
@@ -360,6 +366,9 @@ function init() {
             if (fpsClock) fpsClock.getDelta();
         } else {
             if (fpsClock) fpsClock.getDelta();
+            if (currentGameState === GAME_STATE.PLAYING) {
+                missionLastFrameTime = performance.now();
+            }
         }
     });
 
@@ -489,6 +498,9 @@ function init() {
             currentGameState = GAME_STATE.PLAYING;
             startedMaze = true;
             missionLastFrameTime = performance.now();
+            if (controls && typeof controls.syncOrientation === 'function') {
+                controls.syncOrientation();
+            }
         } else if (currentGameState === GAME_STATE.MENU || !startedMaze) {
             // MISSION LAUNCH: Spawn inside fully enclosed starting chamber facing into maze
             currentGameState = GAME_STATE.PLAYING;
@@ -502,6 +514,9 @@ function init() {
                 _camAimTarget.set( maze.getOffset(1), maze.getOffset(1), maze.getOffset(1) );
                 aimCameraNode( cameraNode, _camAimTarget );
                 camera.rotation.set(0, 0, 0);
+            }
+            if (controls && typeof controls.syncOrientation === 'function') {
+                controls.syncOrientation();
             }
         } else if (isInFreeLook) {
             currentGameState = GAME_STATE.VICTORY;
@@ -633,11 +648,24 @@ function init() {
             }
         }
 
-        if (event.code == 'KeyP' && controls.isLocked)
+        // When paused, pressing P, Escape, Space, or Enter resumes flight
+        if (currentGameState === GAME_STATE.PAUSED) {
+            if (event.code === 'KeyP' || event.code === 'Escape' || event.code === 'Space' || event.code === 'Enter') {
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT')) {
+                    return;
+                }
+                event.preventDefault();
+                menuLockControls();
+                return;
+            }
+        }
+
+        if (event.code === 'KeyP' && controls.isLocked)
         {
             controls.disableLock(new Event(''));
         }
-        if (event.code == 'escape' && controls.isLocked)
+        if (event.code === 'Escape' && controls.isLocked)
         {
             controls.disableLock(new Event(''));
         }
@@ -1174,9 +1202,15 @@ function buildMaze(size=mazeSize) {
         }
     }
 
-    wallGeometry.setAttribute( 'color', new THREE.InstancedBufferAttribute( wallColors, 3 ) );
-    wallInstancedMesh.instanceMatrix.needsUpdate = true;
-    blockInstanceMesh.instanceMatrix.needsUpdate = true;
+        // Dispose previous color attribute on wallGeometry to prevent GPU buffer leak
+        const oldColor = wallGeometry.getAttribute('color');
+        if (oldColor && typeof oldColor.dispose === 'function') {
+            oldColor.dispose();
+        }
+
+        wallGeometry.setAttribute( 'color', new THREE.InstancedBufferAttribute( wallColors, 3 ) );
+        wallInstancedMesh.instanceMatrix.needsUpdate = true;
+        blockInstanceMesh.instanceMatrix.needsUpdate = true;
 
     mazeGroup.add( wallInstancedMesh );
     mazeGroup.add( blockInstanceMesh );
@@ -1595,7 +1629,7 @@ var animate = function () {
             // Update 3D navigational compass arrow towards exit gateway
             compassManager.update();
 
-            // Record flight trail history
+            // Record flight trail history (bounded with periodic compaction to prevent unbounded GC spikes)
             const historyDistSq = (0.4 * collisionDistance)**2;
             if (historyPositions.length === 0 || historyPositions[historyPositions.length - 1].distanceToSquared(cameraNode.position) > historyDistSq) {
                 const newHistoryPosition = tmpVector.copy(cameraNode.position);
@@ -1606,6 +1640,14 @@ var animate = function () {
                     let t = numPoints > 1 ? i / (numPoints - 1) : 1;
                     _scratchInterp.lerpVectors(lastPos, newHistoryPosition, t);
                     historyPositions.push(new THREE.Vector3(_scratchInterp.x, _scratchInterp.y, _scratchInterp.z));
+                }
+
+                if (historyPositions.length >= 2000) {
+                    const compacted = [];
+                    for (let i = 0; i < historyPositions.length; i += 2) {
+                        compacted.push(historyPositions[i]);
+                    }
+                    historyPositions = compacted;
                 }
             }
 
@@ -1769,7 +1811,10 @@ const mouseSensEl = document.querySelector('#setting-mouse-sensitivity');
 if (mouseSensEl) {
     mouseSensEl.addEventListener('input', (event) => {
         const val = parseFloat(event.target.value) || 1.0;
-        controls.rollSpeed = val;
+        if (controls) {
+            controls.sensitivityMultiplier = val;
+            controls.rollSpeed = val;
+        }
         const badge = document.querySelector('#valSensitivityBadge');
         if (badge) badge.textContent = `${val.toFixed(1)}×`;
         storageSetItem('setting-mouse-sensitivity', event.target.value);

@@ -15,14 +15,14 @@ function clamp(val, min, max) {
 }
 
 const WORLD_Y = new Vector3( 0, 1, 0 );
+const MAX_PITCH = Math.PI * 0.49; // ~88.2 deg (prevents Euler singularity & flipping)
+const MIN_PITCH = -Math.PI * 0.49;
 
 var FlyPointerLockControls = function ( object, domElement ) {
 
     if ( domElement === undefined ) {
-
         console.warn( 'THREE.FlyControls: The second parameter "domElement" is now mandatory.' );
         domElement = document;
-
     }
 
     this.object = object;
@@ -31,18 +31,25 @@ var FlyPointerLockControls = function ( object, domElement ) {
     if ( domElement ) this.domElement.setAttribute( 'tabindex', - 1 );
 
     // API
-
     this.movementSpeed = 1.0;
     this.rollSpeed = 0.005;
+    this.mouseSensitivity = 0.002;
+    this.sensitivityMultiplier = 1.0;
+
+    this.isBoosting = false;
+    this.boostMultiplier = 2.2;
 
     this.autoForward = false;
-
     this.isLocked = false;
+
+    // Single source of truth for orientation in first-person mode
+    this.yaw = 0;
+    this.pitch = 0;
 
     this.vrControlOptions = {
         teleportationEnabled: true,
         rotationSmoothing: false
-    }
+    };
     this.vrTeleportTimeout = 500;
     this.vrLastTeleportTime = 0;
     this.vrTeleportRecentered = false;
@@ -52,17 +59,14 @@ var FlyPointerLockControls = function ( object, domElement ) {
     this.vrLastRotateTime = 0;
 
     // on first page load, android lets the pointer lock work
-    // this causes the game to be unstartable
     this.lastLockDate = undefined;
 
     this.gimbalLocked = true;
-
     this.isXRPresenting = false;
 
     // internals
-
     this.tmpQuaternion = new Quaternion();
-    this.tmpEulerAngle = new Euler();
+    this.tmpEulerAngle = new Euler(0, 0, 0, 'YXZ');
 
     this.mouseStatus = 0;
 
@@ -75,7 +79,7 @@ var FlyPointerLockControls = function ( object, domElement ) {
 
     var changeEvent = { type: 'change' };
     var lockEvent = { type: 'lock' };
-    var unlockEvent = { type: 'unlock' }
+    var unlockEvent = { type: 'unlock' };
     var teleportEvent = { type: 'teleport' };
 
     function is_touch_device() {
@@ -103,14 +107,25 @@ var FlyPointerLockControls = function ( object, domElement ) {
     var moveLastY = 0;
     var moveTouchIdentifier = 0;
 
-    var mouseSensitivity = 0.002;
-
     var accumulatedMouseRotationY = 0;
     var lastMouseMoveTime = 0;
-    // allow the first snap to be easy (0.1), and subsequent snaps intentional (0.5)
-    // these thresholds are unitless
     const mouseInstantRotateThreshold = (b) => b ? 0.5 : 0.1;
     var firstRotationApplied = false;
+
+    /**
+     * Synchronize internal yaw and pitch angles from object's current quaternion.
+     * Prevents rotational jumps when taking control of the camera.
+     */
+    this.syncOrientation = function() {
+        if (!scope.object) return;
+        scope.tmpEulerAngle.setFromQuaternion(scope.object.quaternion, 'YXZ');
+        scope.pitch = clamp(scope.tmpEulerAngle.x, MIN_PITCH, MAX_PITCH);
+        scope.yaw = scope.tmpEulerAngle.y;
+        if (scope.gimbalLocked && !scope.isXRPresenting) {
+            scope.object.rotation.order = 'YXZ';
+            scope.object.rotation.set(scope.pitch, scope.yaw, 0, 'YXZ');
+        }
+    };
 
     function onMouseMove( event ) {
         if ( scope.isLocked === false ) return;
@@ -118,25 +133,42 @@ var FlyPointerLockControls = function ( object, domElement ) {
         const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
         const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
 
+        // Discard extreme delta spikes during pointerlock acquisition/re-entry
+        if (Math.abs(movementX) > 600 || Math.abs(movementY) > 600) return;
+
+        const effectiveSensitivity = scope.mouseSensitivity * scope.sensitivityMultiplier;
+
         const shouldInstantRotate = scope.isXRPresenting && !scope.vrControlOptions.rotationSmoothing;
-        // const shouldInstantRotate = true;
         if (!shouldInstantRotate) {
+            if (scope.gimbalLocked && !scope.isXRPresenting) {
+                // Direct yaw & pitch calculation — zero gimbal lock, zero Euler drift
+                scope.yaw -= movementX * effectiveSensitivity;
+                scope.pitch -= movementY * effectiveSensitivity;
+                scope.pitch = clamp(scope.pitch, MIN_PITCH, MAX_PITCH);
 
-            scope.tmpVector.set( - movementY * (scope.isXRPresenting ? 0 : 1), - movementX, 0 );
+                // Seamlessly wrap yaw within [-PI, PI]
+                if (scope.yaw > Math.PI) scope.yaw -= Math.PI * 2;
+                else if (scope.yaw < -Math.PI) scope.yaw += Math.PI * 2;
 
-            scope.applyRotation( scope.tmpVector, mouseSensitivity );
+                scope.object.rotation.order = 'YXZ';
+                scope.object.rotation.set(scope.pitch, scope.yaw, 0, 'YXZ');
 
-            scope.dispatchEvent( changeEvent );
+                scope.dispatchEvent( changeEvent );
+            } else {
+                scope.tmpVector.set( - movementY * (scope.isXRPresenting ? 0 : 1), - movementX, 0 );
+                scope.applyRotation( scope.tmpVector, effectiveSensitivity );
+                scope.dispatchEvent( changeEvent );
+            }
         } else {
             if (Date.now() - lastMouseMoveTime > 500) {
                 accumulatedMouseRotationY = 0;
                 firstRotationApplied = false;
-            };
+            }
 
             lastMouseMoveTime = Date.now();
 
-            // for mouse, accumulate rotation and apply snap
-            accumulatedMouseRotationY -= movementX * mouseSensitivity;
+            // for mouse in VR snap mode, accumulate rotation and apply snap
+            accumulatedMouseRotationY -= movementX * effectiveSensitivity;
             if (Math.abs(accumulatedMouseRotationY) > mouseInstantRotateThreshold(firstRotationApplied)) {
                 const rotationAmount = Math.sign(accumulatedMouseRotationY) * Math.PI / 4;
                 scope.doInstantRotate(rotationAmount);
@@ -158,20 +190,24 @@ var FlyPointerLockControls = function ( object, domElement ) {
             let t = event.changedTouches[i];
             if (t.clientX >= touchDOM.clientWidth / 2 && !panTouchDragging && (!moveTouchDragging || moveTouchIdentifier != t.identifier)) {
                 panTouchDragging = true;
-
                 panLastTouchX = t.clientX;
                 panLastTouchY = t.clientY;
                 panTouchIdentifier = t.identifier;
-            } else if (!moveTouchDragging && (!panTouchDragging || panTouchIdentifier != t.identifier)) {
+            }
+            if (t.clientX < touchDOM.clientWidth / 2 && !moveTouchDragging && (!panTouchDragging || panTouchIdentifier != t.identifier)) {
                 moveTouchDragging = true;
                 moveStartX = t.clientX;
                 moveStartY = t.clientY;
+                moveLastX = t.clientX;
+                moveLastY = t.clientY;
                 moveTouchIdentifier = t.identifier;
             }
         }
     }
 
     function onTouchEnd( event ) {
+        if ( scope.isLocked === false ) return;
+
         event.preventDefault();
 
         for (let i = 0; i < event.changedTouches.length; i++) {
@@ -199,9 +235,7 @@ var FlyPointerLockControls = function ( object, domElement ) {
                 panLastTouchY = t.clientY;
 
                 scope.tmpVector.set( - movementY, - movementX, 0 );
-
                 scope.applyRotation( scope.tmpVector, 0.006 );
-
                 scope.dispatchEvent( changeEvent );
             } else if (t.identifier == moveTouchIdentifier && moveTouchDragging) {
                 moveLastX = t.clientX;
@@ -211,81 +245,97 @@ var FlyPointerLockControls = function ( object, domElement ) {
     }
 
     function onPointerlockChange() {
-        // prevent android's fake pointerlocks on first load
         if ( (scope.touchable && scope.lastLockDate !== undefined && (new Date().getTime() - scope.lastLockDate) < 250) ||
               (moveTouchDragging || panTouchDragging) ) {
             return;
         }
 
         if ( scope.domElement.ownerDocument.pointerLockElement === scope.domElement ) {
-
-            scope.dispatchEvent( lockEvent );
-
             scope.isLocked = true;
-
+            scope.syncOrientation();
+            scope.dispatchEvent( lockEvent );
         } else {
-
-            scope.dispatchEvent( unlockEvent );
-
             scope.isLocked = false;
-
             scope.moveState = { up: 0, down: 0, left: 0, right: 0, forward: 0, back: 0, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, rollLeft: 0, rollRight: 0 };
+            scope.isBoosting = false;
             scope.updateMovementVector();
             scope.updateRotationVector();
-
+            scope.dispatchEvent( unlockEvent );
         }
-    };
+    }
+
+    function onWindowBlur() {
+        scope.moveState = { up: 0, down: 0, left: 0, right: 0, forward: 0, back: 0, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, rollLeft: 0, rollRight: 0 };
+        scope.isBoosting = false;
+        scope.updateMovementVector();
+        scope.updateRotationVector();
+    }
 
     this.disableLock = function( event ) {
         try {
             scope.domElement.ownerDocument.exitPointerLock();
         }
-        catch {} // do nothing
+        catch {}
 
         if (scope.isLocked) {
-            scope.dispatchEvent( unlockEvent );
-
             scope.isLocked = false;
+            scope.moveState = { up: 0, down: 0, left: 0, right: 0, forward: 0, back: 0, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, rollLeft: 0, rollRight: 0 };
+            scope.isBoosting = false;
+            scope.updateMovementVector();
+            scope.updateRotationVector();
+            scope.dispatchEvent( unlockEvent );
         }
 
-        event.preventDefault();
-    }
+        if (event && event.preventDefault) event.preventDefault();
+    };
 
     function onPointerlockError() {
         console.error( 'FlyPointerlockControls: Unable to use Pointer Lock API' );
-    };
+    }
 
     this.connect = function() {
         scope.domElement.ownerDocument.addEventListener( 'mousemove', onMouseMove, false);
         scope.domElement.ownerDocument.addEventListener( 'pointerlockchange', onPointerlockChange, false);
         scope.domElement.ownerDocument.addEventListener( 'pointerlockerror', onPointerlockError, false);
+        window.addEventListener( 'blur', onWindowBlur, false );
 
         touchDOM = scope.domElement.ownerDocument.getElementById('mainCanvas');
-        touchDOM.addEventListener( 'touchstart', onTouchStart, false);
-        touchDOM.addEventListener( 'touchmove', onTouchMove, false);
-        touchDOM.addEventListener( 'touchend', onTouchEnd, false);
-        touchDOM.addEventListener( 'touchcancel', onTouchEnd, false);
+        if (touchDOM) {
+            touchDOM.addEventListener( 'touchstart', onTouchStart, false);
+            touchDOM.addEventListener( 'touchmove', onTouchMove, false);
+            touchDOM.addEventListener( 'touchend', onTouchEnd, false);
+            touchDOM.addEventListener( 'touchcancel', onTouchEnd, false);
+        }
 
         let exitDOM = scope.domElement.ownerDocument.getElementById('completionMessage');
-        exitDOM.addEventListener( 'touchstart', scope.disableLock , false );
+        if (exitDOM) exitDOM.addEventListener( 'touchstart', scope.disableLock , false );
         exitDOM = scope.domElement.ownerDocument.getElementById('compass');
-        exitDOM.addEventListener( 'touchstart', scope.disableLock , false );
+        if (exitDOM) exitDOM.addEventListener( 'touchstart', scope.disableLock , false );
+
+        scope.domElement.ownerDocument.addEventListener('keydown', onKeyDown, false);
+        scope.domElement.ownerDocument.addEventListener('keyup', onKeyUp, false);
     };
 
     this.disconnect = function() {
         scope.domElement.ownerDocument.removeEventListener( 'mousemove', onMouseMove, false );
         scope.domElement.ownerDocument.removeEventListener( 'pointerlockchange', onPointerlockChange, false );
         scope.domElement.ownerDocument.removeEventListener( 'pointerlockerror', onPointerlockError, false );
+        window.removeEventListener( 'blur', onWindowBlur, false );
 
-        touchDOM.removeEventListener( 'touchstart', onTouchStart, false);
-        touchDOM.removeEventListener( 'touchmove', onTouchMove, false);
-        touchDOM.removeEventListener( 'touchend', onTouchEnd, false);
-        touchDOM.removeEventListener( 'touchcancel', onTouchEnd, false);
+        if (touchDOM) {
+            touchDOM.removeEventListener( 'touchstart', onTouchStart, false);
+            touchDOM.removeEventListener( 'touchmove', onTouchMove, false);
+            touchDOM.removeEventListener( 'touchend', onTouchEnd, false);
+            touchDOM.removeEventListener( 'touchcancel', onTouchEnd, false);
+        }
 
         let exitDOM = scope.domElement.ownerDocument.getElementById('completionMessage');
-        exitDOM.removeEventListener( 'touchstart', scope.disableLock , false );
+        if (exitDOM) exitDOM.removeEventListener( 'touchstart', scope.disableLock , false );
         exitDOM = scope.domElement.ownerDocument.getElementById('compass');
-        exitDOM.removeEventListener( 'touchstart', scope.disableLock , false );
+        if (exitDOM) exitDOM.removeEventListener( 'touchstart', scope.disableLock , false );
+
+        scope.domElement.ownerDocument.removeEventListener('keydown', onKeyDown, false);
+        scope.domElement.ownerDocument.removeEventListener('keyup', onKeyUp, false);
     };
 
     this.dispose = function() {
@@ -293,7 +343,6 @@ var FlyPointerLockControls = function ( object, domElement ) {
     };
 
     this.update = function ( delta ) {
-
         if ( scope.isLocked === false ) return;
 
         this.tmpVector.copy(this.moveVector);
@@ -305,23 +354,28 @@ var FlyPointerLockControls = function ( object, domElement ) {
         this.tmpVector.x = clamp (this.tmpVector.x, -1, 1);
         this.tmpVector.z = clamp (this.tmpVector.z, -1, 1);
 
+        // If player is boosting with Space and no directional keys are held, propel forward
+        if (this.isBoosting && this.tmpVector.lengthSq() < 1e-6) {
+            this.tmpVector.z = -1;
+        }
+
         if (this.tmpVector.lengthSq() > 1.0)
             this.tmpVector.normalize();
 
         const shouldTeleport = this.vrControlOptions.teleportationEnabled && this.isXRPresenting;
         if (!shouldTeleport) {
-            let moveMult = delta * this.movementSpeed;
+            const currentSpeed = this.movementSpeed * (this.isBoosting ? this.boostMultiplier : 1.0);
+            let moveMult = delta * currentSpeed;
 
-            // move normally
+            // Move relative to current camera heading
             this.object.translateX( this.tmpVector.x * moveMult );
             this.object.translateY( this.tmpVector.y * moveMult );
             this.object.translateZ( this.tmpVector.z * moveMult );
         } else {
-            // teleportation logic
+            // VR teleportation logic
             const currentTime = new Date().getTime();
             const canTelport = this.vrTeleportRecentered || ((currentTime - this.vrLastTeleportTime) > this.vrTeleportTimeout);
             if (this.tmpVector.lengthSq() > 0.7 && canTelport) {
-                // normalize again - always teleport as far as possible
                 this.tmpVector.normalize();
 
                 const teleportTime = Math.min(this.vrTeleportTimeout, Date.now() - this.vrLastTeleportTime) / 1000;
@@ -341,139 +395,99 @@ var FlyPointerLockControls = function ( object, domElement ) {
             }
         }
 
-        let rotMult = delta * this.rollSpeed;
-        this.applyRotation( this.rotationVector, rotMult );
+        // Apply keyboard rotation only when rotation keys are actively pressed (avoids zero-vector Matrix churn)
+        if (this.rotationVector.lengthSq() > 1e-6) {
+            let rotMult = delta * this.rollSpeed;
+            this.applyRotation( this.rotationVector, rotMult );
+        }
     };
 
     this.handleVRRotation = function ( stickInput, delta ) {
-        // Handle VR controller rotation input
-        if (Math.abs(stickInput) < 0.1) {
-            stickInput = 0;
-        }
+        if (Math.abs(stickInput) < 0.1) return;
 
         if (this.vrControlOptions.rotationSmoothing) {
-            // Smooth rotation mode: continuous rotation based on stick position
-            if (Math.abs(stickInput) > 0.1) {
-                const rotationAmount = stickInput * this.vrRotationSmoothSpeed * delta;
-                this.object.rotateOnWorldAxis(WORLD_Y, -rotationAmount);
-            }
-        } else {
+            const rotationAmount = stickInput * this.vrRotationSmoothSpeed * delta;
+            this.object.rotateOnWorldAxis(WORLD_Y, -rotationAmount);
         }
     };
 
     this.applyRotation = function ( rotationVector_, scaleFactor = 1 ) {
+        if (rotationVector_.lengthSq() < 1e-7) return;
 
-        if (scope.gimbalLocked)
-        {
+        if (scope.gimbalLocked) {
             const shouldInstantRotate = this.isXRPresenting && !this.vrControlOptions.rotationSmoothing;
             if (!shouldInstantRotate) {
-                scope.object.rotateOnWorldAxis(WORLD_Y, rotationVector_.y * scaleFactor);
-                scope.tmpEulerAngle.setFromQuaternion(scope.object.quaternion, 'YXZ');
-                scope.tmpEulerAngle.x = clamp(scope.tmpEulerAngle.x + rotationVector_.x * scaleFactor, -Math.PI / 2, Math.PI / 2);
-                scope.tmpEulerAngle.z = 0;
-                scope.object.rotation.copy(scope.tmpEulerAngle);
+                scope.yaw += rotationVector_.y * scaleFactor;
+                scope.pitch += rotationVector_.x * scaleFactor;
+                scope.pitch = clamp(scope.pitch, MIN_PITCH, MAX_PITCH);
+
+                if (scope.yaw > Math.PI) scope.yaw -= Math.PI * 2;
+                else if (scope.yaw < -Math.PI) scope.yaw += Math.PI * 2;
+
+                scope.object.rotation.order = 'YXZ';
+                scope.object.rotation.set(scope.pitch, scope.yaw, 0, 'YXZ');
             } else {
-                // Instant rotation mode: snap rotation with cooldown
                 const elapsedTime = Date.now() - this.vrLastRotateTime;
                 const threshold = 0.7;
                 if (Math.abs(this.rotationVector.y) > threshold && elapsedTime > 500) {
                     this.vrLastRotateTime = Date.now();
-
                     const rotationAmount = Math.sign(this.rotationVector.y) * Math.PI / 4;
-
                     this.doInstantRotate(rotationAmount);
                 } else if (Math.abs(this.rotationVector.y) < 0.2) {
-                    // Reset the rotate time if stick returns to center
                     this.vrLastRotateTime = 0;
                 }
             }
-        }
-        else
-        {
+        } else {
             scope.tmpQuaternion.set( rotationVector_.x * scaleFactor, rotationVector_.y * scaleFactor, rotationVector_.z * scaleFactor, 1 ).normalize();
             scope.object.quaternion.multiply( scope.tmpQuaternion );
+            scope.object.rotation.setFromQuaternion( scope.object.quaternion, scope.object.rotation.order );
         }
-
-        // expose the rotation vector for convenience
-        scope.object.rotation.setFromQuaternion( scope.object.quaternion, scope.object.rotation.order );
-    }
+    };
 
     this.doInstantRotate = function(rotationAmount) {
         scope.object.rotateOnWorldAxis(WORLD_Y, rotationAmount);
+        scope.syncOrientation();
         scope.dispatchEvent( teleportEvent );
-    }
+    };
 
-    this.setGimbalLocked = function(setting)
-    {
-        if (scope.gimbalLocked && !setting)
-        {
-            // transition to unlocked camera
+    this.setGimbalLocked = function(setting) {
+        if (scope.gimbalLocked && !setting) {
             scope.gimbalLocked = false;
-        }
-        else if (setting && !scope.gimbalLocked)
-        {
-            // transition to locked camera
-            scope.tmpEulerAngle.setFromQuaternion(scope.object.quaternion, 'YXZ');
-            scope.tmpEulerAngle.z = 0;
-            scope.tmpEulerAngle.x = clamp(scope.tmpEulerAngle.x, -Math.PI * 0.45, Math.PI * 0.45);
-            scope.object.rotation.copy(scope.tmpEulerAngle);
-
+        } else if (setting && !scope.gimbalLocked) {
+            scope.syncOrientation();
             scope.gimbalLocked = true;
         }
-    }
+    };
 
-    this.setXRPresenting = function(presenting)
-    {
-        if (presenting )
-        {
-            // reset pitch and roll
-            scope.tmpEulerAngle.setFromQuaternion(scope.object.quaternion, 'YXZ');
-            scope.tmpEulerAngle.z = 0;
-            scope.tmpEulerAngle.x = 0;
-            scope.object.rotation.copy(scope.tmpEulerAngle);
+    this.setXRPresenting = function(presenting) {
+        if (presenting) {
+            scope.syncOrientation();
+            scope.pitch = 0;
+            scope.object.rotation.set(scope.pitch, scope.yaw, 0, 'YXZ');
 
-            if (!scope.gimbalLocked)
-            {
+            if (!scope.gimbalLocked) {
                 scope.setGimbalLocked(true);
             }
         }
-
         scope.isXRPresenting = presenting;
-    }
+    };
 
     this.updateMovementVector = function () {
-
         var forward = ( this.moveState.forward || ( this.autoForward && ! this.moveState.back ) ) ? 1 : 0;
-
         this.moveVector.x = ( - this.moveState.left + this.moveState.right );
         this.moveVector.y = ( - this.moveState.down + this.moveState.up );
         this.moveVector.z = ( - forward + this.moveState.back );
-
-        //console.log( 'move:', [ this.moveVector.x, this.moveVector.y, this.moveVector.z ] );
-
     };
 
     this.updateRotationVector = function () {
-
         this.rotationVector.x = ( - this.moveState.pitchDown + this.moveState.pitchUp) * (this.isXRPresenting ? 0 : 1);
         this.rotationVector.y = ( - this.moveState.yawRight + this.moveState.yawLeft );
         this.rotationVector.z = ( - this.moveState.rollRight + this.moveState.rollLeft );
-
-        //console.log( 'rotate:', [ this.rotationVector.x, this.rotationVector.y, this.rotationVector.z ] );
-
     };
 
     function contextmenu( event ) {
-
         event.preventDefault();
-
     }
-
-    this.dispose = function () {
-
-        this.disconnect();
-
-    };
 
     this.lock = function() {
         let lockPromise = null;
@@ -484,26 +498,29 @@ var FlyPointerLockControls = function ( object, domElement ) {
             console.warn('Pointer lock request failed synchronously, fallback to direct flight:', e);
             if (!scope.isLocked) {
                 scope.isLocked = true;
+                scope.syncOrientation();
                 scope.dispatchEvent( lockEvent );
                 return;
             }
         }
 
         if (lockPromise && typeof lockPromise.catch === 'function') {
-            lockPromise.catch((err) => {
+            lockPromise.catch(() => {
                 if (!scope.isLocked) {
                     scope.isLocked = true;
+                    scope.syncOrientation();
                     scope.dispatchEvent( lockEvent );
                 }
             });
         }
 
         if (!this.isLocked && (this.touchable || this.isXRPresenting)) {
-            scope.dispatchEvent( lockEvent );
             scope.isLocked = true;
+            scope.syncOrientation();
+            scope.dispatchEvent( lockEvent );
             scope.lastLockDate = new Date().getTime();
         }
-    }
+    };
 
     this.unlock = function() {
         try {
@@ -511,10 +528,14 @@ var FlyPointerLockControls = function ( object, domElement ) {
         } catch (_) {}
 
         if (scope.isLocked) {
-            scope.dispatchEvent( unlockEvent );
             scope.isLocked = false;
+            scope.moveState = { up: 0, down: 0, left: 0, right: 0, forward: 0, back: 0, pitchUp: 0, pitchDown: 0, yawLeft: 0, yawRight: 0, rollLeft: 0, rollRight: 0 };
+            scope.isBoosting = false;
+            scope.updateMovementVector();
+            scope.updateRotationVector();
+            scope.dispatchEvent( unlockEvent );
         }
-    }
+    };
 
     this.domElement.addEventListener( 'contextmenu', contextmenu, false );
 
@@ -522,90 +543,100 @@ var FlyPointerLockControls = function ( object, domElement ) {
     this.updateRotationVector();
 
     var onKeyDown = function ( event ) {
+        if ( !scope.isLocked ) return;
+        if ( event.altKey ) return;
 
-        if ( !scope.isLocked ) {
-            return;
-        }
-
-        if ( event.altKey ) {
-
-            return;
-
-        }
-
-        //event.preventDefault();
-
-        switch ( event.keyCode ) {
-
-            // case 16: /* shift */ scope.movementSpeedMultiplier = .1; break;
-
+        switch ( event.code || event.keyCode ) {
+            case 'KeyW':
             case 87: /*W*/ scope.moveState.forward = 1; break;
+            case 'KeyS':
             case 83: /*S*/ scope.moveState.back = 1; break;
 
+            case 'KeyA':
             case 65: /*A*/ scope.moveState.left = 1; break;
+            case 'KeyD':
             case 68: /*D*/ scope.moveState.right = 1; break;
 
-            case 32: /* space */ scope.moveState.up = 1; break;
-            case 16: /* shift */ scope.moveState.down = 1; break;
+            case 'Space':
+            case 32: /* space */
+                scope.isBoosting = true;
+                break;
 
+            case 'ShiftLeft':
+            case 'ShiftRight':
+            case 16: /* shift */
+                scope.moveState.down = 1;
+                break;
+
+            case 'ArrowUp':
             case 38: /*up*/ scope.moveState.pitchUp = 1; break;
+            case 'ArrowDown':
             case 40: /*down*/ scope.moveState.pitchDown = 1; break;
 
+            case 'ArrowLeft':
             case 37: /*left*/ scope.moveState.yawLeft = 1; break;
+            case 'ArrowRight':
             case 39: /*right*/ scope.moveState.yawRight = 1; break;
 
+            case 'KeyQ':
             case 81: /*Q*/ scope.moveState.rollLeft = 1; break;
+            case 'KeyE':
             case 69: /*E*/ scope.moveState.rollRight = 1; break;
-
         }
 
-        if (scope.gimbalLocked)
-        {
+        if (scope.gimbalLocked) {
             scope.moveState.rollLeft = 0;
             scope.moveState.rollRight = 0;
         }
 
         scope.updateMovementVector();
         scope.updateRotationVector();
-
     };
 
     var onKeyUp = function ( event ) {
-
-        switch ( event.keyCode ) {
-
-            // case 16: /* shift */ scope.movementSpeedMultiplier = 1; break;
-
+        switch ( event.code || event.keyCode ) {
+            case 'KeyW':
             case 87: /*W*/ scope.moveState.forward = 0; break;
+            case 'KeyS':
             case 83: /*S*/ scope.moveState.back = 0; break;
 
+            case 'KeyA':
             case 65: /*A*/ scope.moveState.left = 0; break;
+            case 'KeyD':
             case 68: /*D*/ scope.moveState.right = 0; break;
 
-            case 32: /* shift */ scope.moveState.up = 0; break;
-            case 16: /* space */ scope.moveState.down = 0; break;
+            case 'Space':
+            case 32: /* space */
+                scope.isBoosting = false;
+                break;
 
+            case 'ShiftLeft':
+            case 'ShiftRight':
+            case 16: /* shift */
+                scope.moveState.down = 0;
+                break;
+
+            case 'ArrowUp':
             case 38: /*up*/ scope.moveState.pitchUp = 0; break;
+            case 'ArrowDown':
             case 40: /*down*/ scope.moveState.pitchDown = 0; break;
 
+            case 'ArrowLeft':
             case 37: /*left*/ scope.moveState.yawLeft = 0; break;
+            case 'ArrowRight':
             case 39: /*right*/ scope.moveState.yawRight = 0; break;
 
+            case 'KeyQ':
             case 81: /*Q*/ scope.moveState.rollLeft = 0; break;
+            case 'KeyE':
             case 69: /*E*/ scope.moveState.rollRight = 0; break;
-
         }
 
         scope.updateMovementVector();
         scope.updateRotationVector();
-
     };
 
-    this.domElement.ownerDocument.addEventListener('keydown', onKeyDown, false);
-    this.domElement.ownerDocument.addEventListener('keyup', onKeyUp, false);
-
     this.connect();
-
 };
 
 FlyPointerLockControls.prototype = Object.create( EventDispatcher.prototype );
